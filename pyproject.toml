@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=64", "wheel"]
+requires = ["setuptools<60", "wheel", "numpy", "cython"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,7 +7,7 @@ name = "ComplyBay"
 version = "0.1.0"
 description = "Bayesian MCMC inversion toolkit for seafloor compliance"
 authors = [{ name = "Mengjie Zheng", email = "mengjie.zheng@utoronto.ca" }]
-license = { text = "MIT" }
+license = "MIT"
 dependencies = [
   "numpy",
   "scipy",

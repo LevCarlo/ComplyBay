@@ -2,3 +2,7 @@
 *.egg-info/
 build/
 dist/
+
+ComplyBay/__pycache__/
+ComplyBay/forward/__pycache__/
+ComplyBay/forward/*.so

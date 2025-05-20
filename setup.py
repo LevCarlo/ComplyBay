@@ -1,4 +1,12 @@
-from setuptools import setup, find_packages
+from numpy.distutils.core import setup, Extension
+from setuptools import find_packages
+
+raydep_module = Extension(
+    name='ComplyBay.forward.raydep_ft',
+    sources=[
+        'ComplyBay/forward/raydep_ft.f95',
+    ],
+)
 
 setup(
     name="ComplyBay",
@@ -10,6 +18,7 @@ setup(
         "matplotlib",
         "bayesbay"
     ],
+    ext_modules=[raydep_module],
     author="Mengjie Zheng",
     description="Bayesian MCMC inversion toolkit for seafloor compliance",
     license="MIT",
