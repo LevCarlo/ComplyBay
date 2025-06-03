@@ -12,14 +12,19 @@ setup(
     name="ComplyBay",
     version="0.1.0",
     packages=find_packages(),
+    ext_modules=[raydep_module],
+    author="Mengjie Zheng",
+    description="Bayesian MCMC inversion toolkit for seafloor compliance",
+    license="MIT",
     install_requires=[
         "numpy",
         "scipy",
         "matplotlib",
         "bayesbay"
     ],
-    ext_modules=[raydep_module],
-    author="Mengjie Zheng",
-    description="Bayesian MCMC inversion toolkit for seafloor compliance",
-    license="MIT",
+    entry_points={
+        'console_scripts': [
+            'complybay_inv=ComplyBay.inversion.inv:main',
+        ],
+    },
 )

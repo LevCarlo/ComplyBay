@@ -1,0 +1,37 @@
+IO:
+  ROOT: null # (default: the yaml file directory)
+  COMPLY_DATA: comply_data
+  DATA: solver
+  SRC_REC: src_rec
+
+INVERSION:
+  MODEL:
+    VS: 
+      inverse: true
+      method: null
+      PRIOR:
+        vmin_offset: 1.5
+        vmin: 0
+        vmax_offset: 1.5
+        vmax: 4.5
+        perturb_in_percent: 10
+    VP:
+      inverse: False
+      method: Brocher2005
+    RHO:
+      inverse: False
+      method: Brocher2005
+    VORONOI: # for the model space
+      max_depth: 2500 # in meters
+      perturb_std: 10
+      n_dimensions_min: 5       
+      n_dimensions_max: 12      
+      birth_from: neighbour
+  
+  HYPERPARAMETERS:
+    n_chains: 16
+    n_iterations: 350_000
+    burnin_iterations: 100_000
+    save_every: 100
+    verbose: false
+  

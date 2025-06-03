@@ -57,7 +57,16 @@ def ncomp_fortran_batch(depth, freqs, model, log_scale=False):
 
     # Compute normalized compliance from Fortran outputs
     ncomp = -k * v_all[0, :] / (ω * zz_all[0, :])
-    return np.log10(ncomp) if log_scale else ncomp
+    if log_scale:
+      if np.any(ncomp <= 0) or np.any(~np.isfinite(ncomp)):
+        # print("⚠️ Invalid ncomp:", ncomp)
+        return np.full_like(ncomp, np.inf)
+      else:
+        ncomp = np.log10(ncomp)
+    return ncomp
+    # return np.log10(ncomp) if log_scale else ncomp
+    
+    
 
 if __name__ == "__main__":
   inpModel = np.array([[1000, 2.500, 4.000, 2.500],
