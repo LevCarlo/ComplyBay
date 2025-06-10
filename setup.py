@@ -24,7 +24,7 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'complybay_inv=ComplyBay.inversion.inv:main',
+            'run_complybay_inv=ComplyBay.scripts.run_inv:main',
         ],
     },
 )
