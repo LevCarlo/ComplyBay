@@ -40,31 +40,24 @@ def ncomp_fortran(depth, freqs, model, log_scale=False):
 
 
 # Vectorized batch version using raydep_batch_ft
-def ncomp_fortran_batch(depth, freqs, model, log_scale=False):
+def ncomp_fortran_batch(depth, freqs, model, k_method='poly', log_scale=False):
     """
     Vectorized version of ncomp_fortran using the raydep_batch_ft Fortran interface.
     """
     ω = 2 * np.pi * freqs
-    # start = time.time()
-    k = k_solver.solve_k(ω, depth, method='poly')
-    # print("k solver:", time.time() - start)
+    k = k_solver.solve_k(ω, depth, method=k_method)
     p = k / ω
 
-    # Call Fortran batch routine
-    # start = time.time()
     v_all, u_all, zz_all, zx_all = raydep_ft.raydep_batch_ft(p, ω, model, model.shape[0], len(p))
-    # print("raydep_batch_ft:", time.time() - start)
-
-    # Compute normalized compliance from Fortran outputs
     ncomp = -k * v_all[0, :] / (ω * zz_all[0, :])
+
+    if np.any(ncomp <= 0) or np.any(~np.isfinite(ncomp)) or np.any(np.isnan(ncomp)):
+      ncomp = np.full_like(ncomp, -np.inf)
+    
     if log_scale:
-      if np.any(ncomp <= 0) or np.any(~np.isfinite(ncomp)):
-        # print("⚠️ Invalid ncomp:", ncomp)
-        return np.full_like(ncomp, np.inf)
-      else:
-        ncomp = np.log10(ncomp)
+      ncomp = np.log10(ncomp)
+    
     return ncomp
-    # return np.log10(ncomp) if log_scale else ncomp
     
     
 
