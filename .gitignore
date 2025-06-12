@@ -3,14 +3,13 @@
 build/
 dist/
 
+
 ComplyBay/__pycache__/
 ComplyBay/forward/__pycache__/
 ComplyBay/forward/*.so
 
-ComplyBay/inversion/*obs.ipynb
-ComplyBay/inversion/*cluster0.ipynb
 ComplyBay/inversion/__pycache__/
 
-ComplyBay/tests/Hydrate_Ridge/*ipynb
-!ComplyBay/tests/Hydrate_Ridge/init_model.ipynb
 ComplyBay/tests/Hydrate_Ridge/solver*
+
+**/*.ipynb

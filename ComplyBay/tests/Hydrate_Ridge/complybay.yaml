@@ -17,10 +17,10 @@ INVERSION:
       method: Brocher2005
     VORONOI: # for the model space
       min_depth: 0 # in meters
-      max_depth: 3000 # in meters
+      max_depth: 3500 # in meters
       perturb_std: 100
-      n_dimensions_min: 5       
-      n_dimensions_max: 12      
+      n_dimensions_min: 6       
+      n_dimensions_max: 15      
       birth_from: neighbour
   
   HYPERPARAMETERS:
