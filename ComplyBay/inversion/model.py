@@ -45,7 +45,6 @@ class VpEstimate:
     def _christensen_shaw(self):
         return 1.511 + 1.304 * self.z - 0.741 * self.z ** 2 + 0.257 * self.z ** 3
     
-
 class RhoEstimate:
     def __init__(self, z=None, vs=None, vp=None):
         self.z = z
@@ -127,6 +126,9 @@ class RhoEstimate:
 
     def _hamilton(self):
         return 1.85 + 0.165 * self.vp
+
+
+
 
 def layer2profile(thickness, values, z=None, interp_method="cubic"):
     """

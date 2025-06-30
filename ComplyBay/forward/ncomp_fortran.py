@@ -51,8 +51,8 @@ def ncomp_fortran_batch(depth, freqs, model, k_method='poly', log_scale=False):
     v_all, u_all, zz_all, zx_all = raydep_ft.raydep_batch_ft(p, ω, model, model.shape[0], len(p))
     ncomp = -k * v_all[0, :] / (ω * zz_all[0, :])
 
-    if np.any(ncomp <= 0) or np.any(~np.isfinite(ncomp)) or np.any(np.isnan(ncomp)):
-      ncomp = np.full_like(ncomp, -np.inf)
+    # if np.any(ncomp <= 0) or np.any(~np.isfinite(ncomp)) or np.any(np.isnan(ncomp)):
+    #   ncomp = np.full_like(ncomp, -np.inf)
     
     if log_scale:
       ncomp = np.log10(ncomp)

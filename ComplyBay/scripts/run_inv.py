@@ -76,11 +76,23 @@ def inversion_init(param, station=None):
         rho_init=rho_init
     )
 
-    forward_func = partial(forward_comply, freqs=freqs, wdepth=wdepth, param=param)
+    forward_params = param["FORWARD"]
+    k_method = forward_params["k_solver"]
+    in_log = forward_params["in_log"]
+
+    forward_func = partial(
+        forward_comply, 
+        freqs=freqs, 
+        wdepth=wdepth, 
+        param=param,
+        k_method=k_method,
+        log_scale=in_log
+    )
     target = Target(
         name="Comply", 
         dobs=comply, 
         covariance_mat_inv=1 / comply_err**2)
+    
     log_likelihood = LogLikelihood(
         targets=target, 
         fwd_functions=forward_func)

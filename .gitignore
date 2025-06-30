@@ -13,3 +13,5 @@ ComplyBay/inversion/__pycache__/
 ComplyBay/tests/Hydrate_Ridge/solver*
 
 **/**/*.ipynb
+
+**/**/*.png
