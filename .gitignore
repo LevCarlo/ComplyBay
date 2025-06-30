@@ -9,6 +9,7 @@ ComplyBay/forward/__pycache__/
 ComplyBay/forward/*.so
 
 ComplyBay/inversion/__pycache__/
+ComplyBay/scripts/__pycache__/
 
 ComplyBay/tests/Hydrate_Ridge/solver*
 
