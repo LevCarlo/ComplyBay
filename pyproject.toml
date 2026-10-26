@@ -1,19 +1,44 @@
 [build-system]
-requires = ["setuptools<60", "wheel", "numpy", "cython"]
-build-backend = "setuptools.build_meta"
+build-backend = "mesonpy"
+requires = ["meson-python>=0.16", "numpy>=2.0"]
 
 [project]
-name = "ComplyBay"
-version = "0.1.0"
-description = "Bayesian MCMC inversion toolkit for seafloor compliance"
-authors = [{ name = "Mengjie Zheng", email = "mengjie.zheng@utoronto.ca" }]
+name = "complybay"
+dynamic = ["version"]
+description = "Forward modelling and Bayesian inversion for ocean-bottom seismology"
+readme = "README.md"
+requires-python = ">=3.10"
 license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Mengjie Zheng", email = "mengjie.zheng@utoronto.ca" }]
 dependencies = [
-  "numpy",
-  "scipy",
-  "matplotlib",
-  "bayesbay"
+  "numpy>=1.25",
+  "scipy>=1.10",
+  "disba>=0.6",
+  "bayesbay",
+  "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "black"]
+dev = ["pytest", "ruff", "meson-python>=0.16", "meson", "ninja"]
+
+[project.scripts]
+run_comply_inv = "complybay.scripts.run_inv:main"
+run_joint_inv = "complybay.scripts.run_joint_inv:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# Legacy modules carried over from v0.1; they are rewritten in the forward-solver
+# refactor, so only formatting-level fixes were applied here.
+"src/complybay/forward/{Rayleigh_propagator_solver,complykernel,k_solver,ncomp_matlab_py}.py" = ["E501", "E731", "B023", "F841"]
+"src/complybay/inversion/*.py" = ["E501", "E712", "B905"]
+"src/complybay/scripts/*.py" = ["E501"]

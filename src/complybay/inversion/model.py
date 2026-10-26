@@ -1,22 +1,23 @@
 import numpy as np
 from scipy.interpolate import CubicSpline
 
+
 class VpEstimate:
     def __init__(self, z=None, vs=None, rho=None):
         self.z = z
         self.vs = vs
         self.rho = rho
-    
-    def estimate(self, keyword, **kwargs): 
+
+    def estimate(self, keyword, **kwargs):
         keyword_map = {
             "Brocher2005": self._brocher,
             "Castegna1995": self._castegna,
             "Christensen&Shaw1970": self._christensen_shaw,
         }
-        
+
         if keyword in keyword_map:
             return keyword_map[keyword]()
-        
+
         elif keyword == "VpVsConst":
             value = kwargs.get("value", 1.73)
             if value is None:
@@ -30,7 +31,7 @@ class VpEstimate:
             return np.full_like(self.vs, value)
         else:
             raise ValueError(f"Unknown keyword: {keyword}")
-    
+
     def _brocher(self):
         conditions = np.logical_and(0 <= self.vs, self.vs <= 4.5)
         return np.where(
@@ -38,19 +39,19 @@ class VpEstimate:
             0.9409 + 2.0947 * self.vs - 0.8206 * self.vs ** 2 + 0.2683 * self.vs ** 3 - 0.0251 * self.vs ** 4,
             np.nan
         )
-    
+
     def _castegna(self):
         return 1.16 * self.vs + 1.36
-    
+
     def _christensen_shaw(self):
         return 1.511 + 1.304 * self.z - 0.741 * self.z ** 2 + 0.257 * self.z ** 3
-    
+
 class RhoEstimate:
     def __init__(self, z=None, vs=None, vp=None):
         self.z = z
         self.vs = vs
         self.vp = vp
-    
+
     def estimate(self, keyword, **kwargs):
         keyword_map = {
             "Brocher2005": self._brocher,
@@ -72,10 +73,10 @@ class RhoEstimate:
             return np.full_like(self.vs, value)
         else:
             raise ValueError(f"Unknown keyword: {keyword}")
-        
+
     def _brocher(self):
         return 1.22679 + 1.53201 * self.vs - 0.83668 * self.vs ** 2 + 0.20673 * self.vs ** 3 - 0.01656 * self.vs ** 4
-    
+
     def _ludwig(self):
         conditions = np.logical_and(1.5 <= self.vp, self.vp <= 8.5)
         return np.where(
@@ -91,7 +92,7 @@ class RhoEstimate:
             1.74 * self.vp ** 0.25,
             np.nan
         )
-    
+
     def _christensen_mooney(self):
         conditions = np.logical_and(5.5 <= self.vp, self.vp <= 7.5)
         return np.where(
@@ -99,7 +100,7 @@ class RhoEstimate:
             0.541 + 0.3601 * self.vp,
             np.nan
         )
-    
+
     def _godfrey(self):
         conditions = np.logical_and(5.9 <= self.vp, self.vp <= 7.1)
         return np.where(
@@ -120,7 +121,7 @@ class RhoEstimate:
             3.22 + 0.20 * (self.vp - 7.5)
         ]
         return np.select(conditions, choices, default=np.nan)
-    
+
     def _willoughby_edwards(self):
         return 1.7 + (0.2 / 300) * self.z
 
@@ -133,12 +134,12 @@ class RhoEstimate:
 def layer2profile(thickness, values, z=None, interp_method="cubic"):
     """
     Convert layer values to a profile with depth.
-    
+
     Parameters:
     - thickness: array of layer thicknesses
     - values: array of values for each layer
     - z: optional array of depths, if None, will be calculated
-    
+
     Returns:
     - z: array of depths
     - profile: array of values at each depth
@@ -148,7 +149,7 @@ def layer2profile(thickness, values, z=None, interp_method="cubic"):
 
     if z is None:
         z = np.linspace(0, edges[-1], len(centers) + 1)
-    
+
     if interp_method == "cubic":
         cs = CubicSpline(centers, values, bc_type='natural', extrapolate=True)
         fz = cs(z)
@@ -157,7 +158,7 @@ def layer2profile(thickness, values, z=None, interp_method="cubic"):
     else:
         raise ValueError(f"Unknown interpolation method: {interp_method}")
     return fz
-    
+
 
 
 

@@ -2,24 +2,25 @@
 FUNCTION ncomp_fortran.py
 
 Translated from Wayne Crawford's MATLAB code for forward calculating normalized
-compliance from synthetic Earth structure  
+compliance from synthetic Earth structure
 
 Original source can be found at (http://www.ipgp.fr/~crawford/Homepage/Software.html).
 
-Stephen Mosher, Feb 2020. 
+Stephen Mosher, Feb 2020.
 '''
 
 #################################### IMPORTS ###################################
 
 # The usual.
+
 import numpy as np
-import time
 
 # Import helper functions - raydep_ft does the heavy lifting. It's an F95
 # file and it has to be compiled using F2PY from NumPy.
-# from forward_funcs import gravd, 
+# from forward_funcs import gravd,
 # start = time.time()
-from ComplyBay.forward import raydep_ft, k_solver
+from complybay.forward import k_solver, raydep_ft
+
 # print("import time:", time.time() - start)
 ################################### FUNCTION ###################################
 
@@ -53,23 +54,22 @@ def ncomp_fortran_batch(depth, freqs, model, k_method='poly', log_scale=False):
 
     # if np.any(ncomp <= 0) or np.any(~np.isfinite(ncomp)) or np.any(np.isnan(ncomp)):
     #   ncomp = np.full_like(ncomp, -np.inf)
-    
+
     if log_scale:
       ncomp = np.log10(ncomp)
-    
+
     return ncomp
-    
-    
+
+
 
 if __name__ == "__main__":
   inpModel = np.array([[1000, 2.500, 4.000, 2.500],
                        [2000, 3.000, 7.000, 4.000],
                          [400, 2.500, 4.000, 1.000],
                          [1000, 3.000, 7.000, 4.000]])
-  
+
   freqs = np.arange(0.003, 0.02 + 0.001, 0.001)
   wdepth = 3000
   # ncomp = ncomp_fortran(wdepth, freqs, inpModel)
   ncomp = ncomp_fortran_batch(wdepth, freqs, inpModel)
   print(ncomp)
-  

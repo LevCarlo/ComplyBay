@@ -1,10 +1,14 @@
 import numpy as np
-from ComplyBay.forward.ncomp_fortran import ncomp_fortran_batch
+
+from complybay.forward.ncomp_fortran import ncomp_fortran_batch
+
 
 class ComplyKernel:
     def __init__(self, model, freq, depth, key, dz=None, dp=0.025):
         self.model = model
-        self.freq = np.array([freq])
+        self.freq = np.atleast_1d(np.asarray(freq, dtype=float))
+        if self.freq.size != 1:
+            raise ValueError("ComplyKernel takes a single frequency.")
         self.depth = depth
         self.key = key
         self.dz = dz
@@ -13,10 +17,10 @@ class ComplyKernel:
         if self.dz is not None:
             thick, params = self._resample(self.model[:, 0], self.model[:, 1:], self.dz)
             self.model = np.column_stack((thick, params))
-    
+
     def cal_kernel(self):
         key_map = {"thick": 0, "rho": 1, "vp": 2, "vs": 3}
-    
+
         model = self.model
         freq = self.freq
         depth = self.depth
@@ -39,8 +43,8 @@ class ComplyKernel:
 
             model[i, idx] = val  # Reset to original value
 
-            kernel[i] = (c_plus - c_minus) / (2 * dp * c0)
-        
+            kernel[i] = ((c_plus - c_minus) / (2 * dp * c0)).item()
+
         return d[:-1], kernel[:-1]
 
     def _resample(self, thick, v, dz):
@@ -52,14 +56,14 @@ class ComplyKernel:
         sizes = np.where(thick > dz, np.ceil(thick / dz).astype(int), 1)
 
         dzi = np.repeat(thick / sizes, sizes)
-        
+
         if v.ndim == 1:
             vi = np.repeat(v, sizes)
         elif v.ndim == 2:
             vi = np.repeat(v, sizes, axis=0)
         else:
             raise ValueError("v must be 1D or 2D array")
-        
+
         return dzi, vi
 
 

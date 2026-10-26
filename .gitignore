@@ -1,18 +1,18 @@
-# egg info & build artifacts
+# build artifacts
 *.egg-info/
 build/
+builddir/
 dist/
+*.so
+__pycache__/
+.venv/
+.pytest_cache/
+.ruff_cache/
 
+# run outputs
+examples/*/solver*
 
-ComplyBay/__pycache__/
-ComplyBay/forward/__pycache__/
-ComplyBay/forward/*.so
+**/*.ipynb
+**/*.png
 
-ComplyBay/inversion/__pycache__/
-ComplyBay/scripts/__pycache__/
-
-ComplyBay/tests/Hydrate_Ridge/solver*
-
-**/**/*.ipynb
-
-**/**/*.png
+.DS_Store

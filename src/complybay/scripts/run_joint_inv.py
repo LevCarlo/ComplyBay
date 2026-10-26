@@ -1,13 +1,16 @@
+import argparse
 import os
+import pickle
+from functools import partial
 from glob import glob
+
+import bayesbay as bb
 import numpy as np
 import yaml
-import argparse
-from ComplyBay.inversion.inv import parametrize_model, forward_comply
-from functools import partial
-from bayesbay.likelihood import Target, LogLikelihood
-import bayesbay as bb
-import pickle
+from bayesbay.likelihood import LogLikelihood, Target
+
+from complybay.inversion.inv import forward_comply, forward_sw, parametrize_model
+
 
 def load_parse_args():
     parser = argparse.ArgumentParser(description="Run Comply Inversion")
@@ -25,17 +28,17 @@ def load_comply_data(param, station=None):
     comply_file = glob(os.path.join(comply_datadir, f"{station}*"))
     if len(comply_file) != 1:
         raise ValueError(f"Multiple or no comply files found in {comply_datadir}")
-    
+
     comply_dat = np.loadtxt(comply_file[0], skiprows=1)
     freqs, comply, comply_err = comply_dat[:, 0], comply_dat[:, 1], comply_dat[:, 2]
 
     src_rec_datadir = os.path.join(param["IO"]["ROOT"], param["IO"]["SRC_REC"])
-    source_file = glob(os.path.join(src_rec_datadir, f"*sources*"))
+    source_file = glob(os.path.join(src_rec_datadir, "*sources*"))
     if len(source_file) != 1:
         raise ValueError(f"Multiple or no source files found in {src_rec_datadir}")
 
     sources = np.genfromtxt(source_file[0], dtype=str)
-    wdepth = float(sources[sources[:, 0] == station, -1])
+    wdepth = float(sources[sources[:, 0] == station, -1].item())
     wdepth = wdepth if wdepth > 0 else -wdepth
 
     return {
@@ -43,6 +46,21 @@ def load_comply_data(param, station=None):
         "comply": comply,
         "comply_err": comply_err,
         "wdepth": wdepth,
+    }
+
+def load_disp_data(param, station=None):
+    disp_datadir = os.path.join(param["IO"]["ROOT"], param["IO"]["DISP_DATA"])
+    disp_file = glob(os.path.join(disp_datadir, f"{station}*"))
+    if len(disp_file) != 1:
+        raise ValueError(f"Multiple or no dispersion files found in {disp_datadir}")
+
+    disp_data = np.loadtxt(disp_file[0], skiprows=1)
+    periods, vph, vph_err = disp_data[:, 0], disp_data[:, 1], disp_data[:, 2]
+
+    return {
+        "periods": periods,
+        "vph": vph,
+        "vph_err": vph_err,
     }
 
 def inversion_init(param, station=None):
@@ -56,6 +74,11 @@ def inversion_init(param, station=None):
     comply_err = comply_data["comply_err"]
     wdepth = comply_data["wdepth"]
 
+    disp_data = load_disp_data(param, station)
+    periods = disp_data["periods"]
+    vph = disp_data["vph"]
+    vph_err = disp_data["vph_err"]
+
     inversion_params = param["INVERSION"]
     model_params = inversion_params["MODEL"]
     vs_init, vp_init, rho_init = None, None, None
@@ -68,35 +91,45 @@ def inversion_init(param, station=None):
     if model_params["RHO"]["inverse"]:
         rho_init_file = glob(os.path.join(IO_params["ROOT"], IO_params["SRC_REC"], f"{station}_rho_init*"))
         rho_init = np.loadtxt(rho_init_file[0], skiprows=1) if rho_init_file else None
-    
-    parameterization = parametrize_model(
-        param=param,
-        vs_init=vs_init,
-        vp_init=vp_init,
-        rho_init=rho_init
-    )
+
+    parameterization = parametrize_model(param, vs_init, vp_init, rho_init)
 
     forward_params = param["FORWARD"]
     k_method = forward_params["k_solver"]
     in_log = forward_params["in_log"]
 
-    forward_func = partial(
-        forward_comply, 
-        freqs=freqs, 
-        wdepth=wdepth, 
+    forward_comply_func = partial(
+        forward_comply,
+        freqs=freqs,
+        wdepth=wdepth,
         param=param,
         k_method=k_method,
         log_scale=in_log
     )
-    target = Target(
-        name="Comply", 
-        dobs=comply, 
-        covariance_mat_inv=1 / comply_err**2)
-    
+
+    forward_sw_func = partial(
+        forward_sw,
+        param=param,
+        periods=periods,
+        wdepth=wdepth,
+    )
+
+    comply_target = Target(
+        name="Comply",
+        dobs=comply,
+        covariance_mat_inv=1 / comply_err**2
+    )
+    disp_target = Target(
+        name="Vph",
+        dobs=vph,
+        covariance_mat_inv=1 / vph_err**2
+    )
+
     log_likelihood = LogLikelihood(
-        targets=target, 
-        fwd_functions=forward_func)
-    
+        targets=[comply_target, disp_target],
+        fwd_functions=[forward_comply_func, forward_sw_func]
+    )
+
     inv_hyperparams = param["INVERSION"]["HYPERPARAMETERS"]
     inversion = bb.BayesianInversion(
         parameterization=parameterization,
@@ -107,11 +140,11 @@ def inversion_init(param, station=None):
 
 def main():
     args = load_parse_args()
-    with open(args.param_file, 'r') as f:
+    with open(args.param_file) as f:
         param = yaml.safe_load(f)
-    
+
     station = args.station
-    
+
     inversion = inversion_init(param, station)
     inv_hyperparams = param["INVERSION"]["HYPERPARAMETERS"]
     inversion.run(
@@ -130,7 +163,7 @@ def main():
         chains[f"chain_{i}"] = saved_states
     with open(os.path.join(savedir, f"{station}_chains.pkl"), 'wb') as f:
         pickle.dump(chains, f)
-    
+
     results = inversion.get_results(concatenate_chains=True)
     with open(os.path.join(savedir, f"{station}_results.pkl"), 'wb') as f:
         pickle.dump(results, f)

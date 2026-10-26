@@ -4,9 +4,10 @@ Email: mengjie.zheng@colorado.edu;zhengmengjie18@mails.ucas.ac.cn
 Date: 2023-10-31 15:48:58
 LastEditTime: 2023-12-15 17:55:54
 LastEditors: Mengjie Zheng
-Description: Pure Python translation of Wayne Crawford's Matlab code 
+Description: Pure Python translation of Wayne Crawford's Matlab code
 '''
 import numpy as np
+
 
 def argdtray(wd, h):
     hh = np.sqrt(np.abs(h))
@@ -44,7 +45,7 @@ def raydep(p, om, d, ro, vp2, vs2):
     y[1] = r2 * y[0] + p
     y[4] = ro[i - 1] - r2 * (p + y[1])
     ym[i - 1, :] = y
-    
+
     while i > 1:
         i -= 1
         ha = psq - 1 / vp2[i - 1]
@@ -71,25 +72,25 @@ def raydep(p, om, d, ro, vp2, vs2):
         y[1] = r2 * y[0] - b1
         y[4] = ro[i - 1] * g3 - r2 * (y[1] - b1)
         ym[i - 1, :] = y
-    
+
     de = y[4] / np.sqrt(y[0] ** 2 + y[1] ** 2)
     ynorm = 1 / y[2]
     y[0:4] = [0, -ynorm, 0, 0]
     x = np.zeros((ist, 4))
-    
+
     for i in range(ist):
         x[i, 0] = -ym[i, 1] * y[0] - ym[i, 2] * y[1] + ym[i, 0] * y[3]
         x[i, 1] = -ym[i, 3] * y[0] + ym[i, 1] * y[1] - ym[i, 0] * y[2]
         x[i, 2] = -ym[i, 4] * y[1] - ym[i, 1] * y[2] - ym[i, 3] * y[3]
         x[i, 3] = ym[i, 4] * y[0] - ym[i, 2] * y[2] + ym[i, 1] * y[3]
-        
+
         ls = i
         if i >= 1:
             sum_val = np.abs(x[i, 0] + i * x[i, 1])
             pbsq = 1 / vs2[i]
             if sum_val < 1e-4:
                 break
-        
+
         ha = psq - 1 / vp2[i]
         ca, sa = argdtray(om * d[i], ha)
         hb = psq - 1 / vs2[i]
@@ -107,16 +108,16 @@ def raydep(p, om, d, ro, vp2, vs2):
         y[1] = (cb * e3 - hbs * e4 + p * e6) / ro[i]
         y[2] = r2 * y[1] - e6
         y[3] = r2 * y[0] - e8
-    
+
     if x[0, 2] == 0:
         raise ValueError('vertical surface stress = 0 in DETRAY')
-    
+
     ist = ls
     v = x[:, 0]
     u = x[:, 1]
     zz = x[:, 2]
     zx = x[:, 3]
-    
+
     return v, u, zz, zx
 
 def dtanh(x):
@@ -137,14 +138,14 @@ def gravd(W, h):
     """
     if len(W) < 1:
         raise ValueError('You must specify at least one frequency')
-    
+
     G = 9.79329
     N = len(W)
     W2 = W * W
     kDEEP = W2 / G
     kSHAL = W / np.sqrt(G * h)
     erDEEP = np.ones_like(W) - G * kDEEP * dtanh(kDEEP * h) / W2
-    
+
     one = np.ones_like(W)
     d = one
     done = np.zeros_like(W, dtype=bool)
@@ -154,7 +155,7 @@ def gravd(W, h):
     e1 = erDEEP
     ktemp = np.zeros_like(W)
     e2 = np.zeros_like(W)
-    
+
     while True:
         e2[nd] = one[nd] - G * k2[nd] * dtanh(k2[nd] * h) / W2[nd]
         d = e2 * e2
@@ -172,7 +173,7 @@ def gravd(W, h):
 def calc_ncomp_mat(depth, freq, model):
     """
     Calculate normalized compliance of a layered earth model.
-    
+
     Parameters:
         depth (float): The water depth (meters) at the site.
         freq (np.array): The frequencies (Hz) to calculate compliance at.
@@ -180,7 +181,7 @@ def calc_ncomp_mat(depth, freq, model):
                          layer densities (g/cc) in column 1,
                          layer compress vels (km/s) in column 2,
                          layer shear vels (km/s) in column 3.
-    
+
     Returns:
         ncomp (np.array): Normalized vertical compliance.
     """
@@ -190,19 +191,19 @@ def calc_ncomp_mat(depth, freq, model):
     rho = model[:, 1] * 1000
     vpsq = 1000000 * model[:, 2] ** 2
     vssq = 1000000 * model[:, 3] ** 2
-    
+
     # Calculate omega
     omega = 2 * np.pi * freq
-    
+
     # Call gravd function (assuming it has been converted to Python as well)
     k = gravd(omega, depth)
-    
+
     # Calculate p
     p = k / omega
-    
+
     # Initialize ncomp array
     ncomp = np.empty(len(p))
-    
+
     # Loop through each p and omega
     for i in range(len(p)):
         # Call raydep function (assuming it has been converted to Python as well)
@@ -218,14 +219,14 @@ if __name__=="__main__":
                          [2000, 3.000, 7.000, 4.000],
                          [400, 2.500, 4.000, 1.000],
                          [1000, 3.000, 7.000, 4.000]])
-    
+
     # Define freqs as an array ranging from 0.003 to 0.02 with an interval of 0.001
     freqs = np.arange(0.003, 0.02 + 0.001, 0.001)
-    
+
     # Define wdepth
     wdepth = 3000  # meters
     print(calc_ncomp_mat(wdepth, freqs, inpModel))
-    
+
     # # Call the calcNCompMat function (this function should be defined beforehand)
     # ncomp = calc_ncomp_mat(wdepth, freqs, inpModel)  # Uncomment this line once the function is defined
 

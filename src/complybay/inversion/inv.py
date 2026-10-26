@@ -1,9 +1,11 @@
-import numpy as np
-from ComplyBay.forward.ncomp_fortran import ncomp_fortran_batch
-from ComplyBay.inversion.model import VpEstimate, RhoEstimate
 import bayesbay as bb
+import numpy as np
 from bayesbay.discretization import Voronoi1D
 from disba import PhaseDispersion
+
+from complybay.forward.ncomp_fortran import ncomp_fortran_batch
+from complybay.inversion.model import RhoEstimate, VpEstimate
+
 
 def init_variables(para, positions=None):
     vmin, vmax = para.get_vmin_vmax(positions)
@@ -29,7 +31,7 @@ def parametrize_model(param, vs_init=None, vp_init=None, rho_init=None):
             )
             prior.set_custom_initialize(init_variables)
             paramters.append(prior)
-    
+
 
     voronoi_param = param["INVERSION"]["MODEL"]["VORONOI"]
     voronoi = Voronoi1D(
@@ -46,7 +48,7 @@ def parametrize_model(param, vs_init=None, vp_init=None, rho_init=None):
 
     parameterization = bb.parameterization.Parameterization(voronoi)
     return parameterization
-    
+
 
 def forward_comply(state, freqs=None, wdepth=None, param=None, k_method='poly', log_scale=False):
     voronoi = state["voronoi"]

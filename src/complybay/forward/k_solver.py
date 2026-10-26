@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.optimize import newton, root_scalar
 
+
 def dispersion_eq(k, omega, H, g=9.79329):
     return g * k * np.tanh(k * H) - omega**2
 
@@ -84,7 +85,7 @@ if __name__ == "__main__":
     k_newton = solve_k(w, H, method='newton')
     k_brent = solve_k(w, H, method='brent')
     k_poly = solve_k(w, H, method='poly')
-    
+
 
     # Evaluate similarity between methods using mean absolute and relative differences
     pairs = [

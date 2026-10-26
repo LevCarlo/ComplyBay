@@ -4,18 +4,23 @@
 
 ## 🔧 Installation
 
-To install the package and build the Fortran extension:
+ComplyBay needs Python ≥ 3.10 and a Fortran compiler (`gfortran`); the Fortran
+forward solver is compiled during installation by `meson-python`.
 
 ```
-git clone https://github.com/your-username/ComplyBay.git
+git clone git@github.com:LevCarlo/ComplyBay.git
 cd ComplyBay
 pip install .
 ```
 
-For development or editable installs:
+For development (editable install, rebuilt on import; keep the environment
+outside the source tree):
 
 ```
-pip install -e .
+pip install meson-python meson ninja numpy
+pip install --no-build-isolation -e ".[dev]"
+pytest
+ruff check .
 ```
 
 ## 🚀 Usage
@@ -23,10 +28,10 @@ pip install -e .
 To run an inversion using a YAML parameter file:
 
 ```
-run_complybay_inv -p your_config.yaml -s STATION_NAME
+run_comply_inv -p your_config.yaml -s STATION_NAME
 ```
 
-Refer to the `/ComplyBay/tests/Hydrate_Ridge` directory for example configurations and test data.
+Refer to the `examples/Hydrate_Ridge` directory for example configurations and test data.
 
 ## 📚 Resources
 
