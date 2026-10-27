@@ -91,6 +91,23 @@ The narrower band is what makes `kim2023` ACFs look smoother; normalizing at
 t = 0 also keeps reflection amplitudes meaningful, whereas normalizing to the
 maximum after tapering makes them depend on the taper.
 
+Performance and accuracy controls:
+
+- `synthetic_acfs` computes one seafloor response and returns the ACF of
+  several components from it (use it for Z + P in an inversion).
+- Frequencies where the combined filter power is below `band_tolerance`
+  (default 1e-6) of its peak are dropped, for data and synthetics alike;
+  `kim2023` then needs frequencies up to ~6.4 Hz only. The whitening water
+  level refers to the maximum smoothed amplitude within that band.
+- `duration` (default 200 s) sets the frequency spacing; the elastic response
+  has no attenuation, so in deep water over a hard seafloor it is still
+  ringing after 100 s. `wraparound_fraction` returns the energy fraction of the
+  filtered response in the last 10 % of the window; check it before using a
+  shorter window.
+- Cost for a 32-layer model, 2 km water, dt = 0.05 s, 200 s: about 4 ms for
+  Z + P with `kim2023` and 8 ms with `tauzin2019` (the response is computed in
+  numpy with the frequency axis folded into one matrix product per layer).
+
 Checked against: energy-flux conservation (incident = reflected P + S, with
 and without water), an independent normal-incidence acoustic transfer-matrix
 solution, sediment and water reverberation times `2 H q`, the opposite

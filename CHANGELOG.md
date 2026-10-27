@@ -40,6 +40,8 @@ option that restores the old behavior where one exists.
   `Highpass`, `Lowpass`, `GaussianFilter`), linear and phase-weighted
   stacking, presets `tauzin2019` (unverified starting values) and `kim2023`
   (smoothing-width unit, water level and high-pass order assumed).
+- `synthetic_acfs` (several components from one response) and
+  `wraparound_fraction` (checks that `duration` is long enough).
 - Regression baseline of the v0.1 forward outputs
   (`tests/data/legacy_v0_1_forward.npz`, `tools/make_legacy_baseline.py`).
 - Tests against analytic and independent solutions; `docs/forward.md`,
@@ -47,6 +49,13 @@ option that restores the old behavior where one exists.
 
 ### Changed
 
+- ACF forward 4-8x faster (32-layer model: Z + P 34 ms -> 4 ms with `kim2023`,
+  8 ms with `tauzin2019`): one response shared by all components
+  (`synthetic_acfs`), frequencies above `ACFProcessing.frequency_limit`
+  dropped, and the propagator folded into one matrix product per layer.
+  Dropping those frequencies (`band_tolerance=1e-6`) changes ACFs by less than
+  1e-5; `band_tolerance=0` keeps every frequency. The whitening water level now
+  refers to the maximum smoothed amplitude within that band.
 - Import name is now `complybay` (was `ComplyBay`), in a `src/` layout.
 - Build uses `meson-python`; `setup.py` and `numpy.distutils` are gone, and
   the package installs on Python 3.10-3.13 with NumPy 2.

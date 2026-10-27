@@ -18,6 +18,10 @@ Tkalcic (2019, GJI 217, 1-24, doi:10.1093/gji/ggz002):
 4. taper the zero-lag peak with a sin^2 ramp over ``zero_lag_taper`` s;
 5. normalize.
 
+Frequencies the filters suppress below ``band_tolerance`` (relative power) are
+dropped before whitening, for data and synthetics alike, so synthetics need
+not be computed there (:meth:`ACFProcessing.frequency_limit`).
+
 :data:`PRESETS` holds two flows. ``tauzin2019`` uses unverified starting
 values. ``kim2023`` takes the Z-/P-ACF settings stated in Kim et al. (2023,
 JGR 128, e2023JB027616, Fig. 1 and Sec. 2.2); the unit of their smoothing
@@ -148,6 +152,7 @@ class ACFProcessing:
     filters: tuple[Filter, ...] = ()  # applied in order; a single filter is accepted
     zero_lag_taper: float = 0.5  # s; 0 disables
     normalize: Normalization = "max"
+    band_tolerance: float = 1e-6  # drop frequencies where the filters pass less power
 
     def __post_init__(self):
         filters = self.filters
@@ -166,6 +171,25 @@ class ACFProcessing:
             raise ValueError("zero_lag_taper must be non-negative.")
         if self.normalize not in ("max", "zero_lag", "none"):
             raise ValueError(f"Unknown normalization {self.normalize!r}.")
+        if not 0 <= self.band_tolerance < 1:
+            raise ValueError("band_tolerance must be in [0, 1).")
+
+    def frequency_limit(self, freqs: np.ndarray) -> float:
+        """Highest frequency (Hz) that can affect the ACF on the grid ``freqs``.
+
+        Above the last frequency where the combined filter power is at least
+        ``band_tolerance`` times its peak, plus half a whitening window (so the
+        running mean inside the band is unchanged), the spectrum is dropped.
+        Without filters, or with ``band_tolerance = 0``, nothing is dropped.
+        """
+        if not self.filters or self.band_tolerance == 0:
+            return np.inf
+        response = np.ones_like(freqs)
+        for f in self.filters:
+            response = response * f.power_response(freqs)
+        passing = np.nonzero(response >= self.band_tolerance * response.max())[0]
+        margin = 0.5 * self.whitening.width if self.whitening is not None else 0.0
+        return float(freqs[passing[-1]] + margin)
 
 
 PRESETS: dict[str, ACFProcessing] = {
@@ -208,13 +232,15 @@ def acf_from_spectrum(
         raise ValueError(f"Spectrum needs {n_fft // 2 + 1} samples for n_fft={n_fft}.")
     df = 1.0 / (n_fft * dt)
     freqs = np.arange(spectrum.size) * df
+    in_band = freqs <= processing.frequency_limit(freqs)
 
-    amplitude = np.abs(spectrum)
+    amplitude = np.where(in_band, np.abs(spectrum), 0.0)
     if processing.whitening is not None:
         w = processing.whitening
         size = max(1, int(round(w.width / df)))
         smooth = uniform_filter1d(amplitude, size=size, mode="nearest")
-        floor = w.water_level * smooth.max()
+        # The water level refers to the band that reaches the ACF, not to dropped noise.
+        floor = w.water_level * smooth[in_band].max()
         amplitude = amplitude / np.maximum(smooth, floor if floor > 0 else np.finfo(float).tiny)
     power = amplitude**2
     for f in processing.filters:

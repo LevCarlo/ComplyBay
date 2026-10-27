@@ -61,10 +61,18 @@ def _fluid_eigenvectors(vp: float, rho: float, p: float):
     return matrix, np.array([q, -q])
 
 
-def _propagate(eigvecs, slowness, omega, thickness):
-    """Batched layer propagators exp over ``thickness`` for every omega: (n_f, m, m)."""
-    phase = np.exp(1j * omega[:, None] * slowness[None, :] * thickness)
-    return np.einsum("ij,fj,jk->fik", eigvecs, phase, np.linalg.inv(eigvecs))
+def _propagate(eigvecs, slowness, omega, thickness, state):
+    """Carry ``state`` (m, n_f, k) through a layer of ``thickness`` for every omega.
+
+    Equivalent to E diag(exp(i omega q h)) E^-1 @ state[:, f, :] for each f.
+    The frequency axis is folded into the columns so each product is one
+    (m, m) @ (m, n_f * k) matrix multiplication.
+    """
+    m, n, k = state.shape
+    phase = np.exp(1j * slowness[:, None] * omega[None, :] * thickness)  # (m, n_f)
+    x = (np.linalg.inv(eigvecs) @ state.reshape(m, n * k)).reshape(m, n, k)
+    x *= phase[:, :, None]
+    return (eigvecs @ x.reshape(m, n * k)).reshape(m, n, k)
 
 
 @dataclass(frozen=True)
@@ -99,19 +107,21 @@ def seafloor_response(model: OBSModel, ray_p: float, freqs) -> SeafloorResponse:
     omega = 2 * np.pi * freqs
     solid = model.solid
 
-    # Seafloor to half-space top: A maps v(0) to v(z_hs).
-    a = np.broadcast_to(np.eye(4, dtype=complex), (freqs.size, 4, 4)).copy()
+    # Unknowns x = (u_x, u_z, tau_zz) at the seafloor; tau_xz(0) = 0 (fluid or vacuum
+    # above). Carry the three seafloor basis vectors to the half-space top, where
+    # m[f] maps x to the half-space wave amplitudes (P down, S down, P up, S up).
+    n = freqs.size
+    # State layout (vector component, frequency, basis vector).
+    basis = np.repeat(np.eye(4, dtype=complex)[:, None, [0, 1, 3]], n, axis=1)
     for h, vp, vs, rho in zip(solid.thickness, solid.vp, solid.vs, solid.rho, strict=False):
         e, q = _solid_eigenvectors(vp, vs, rho, ray_p)
-        a = _propagate(e, q, omega, h) @ a
+        basis = _propagate(e, q, omega, h, basis)
     e_hs, _ = _solid_eigenvectors(solid.vp[-1], solid.vs[-1], solid.rho[-1], ray_p)
-    m = np.linalg.inv(e_hs)[None] @ a  # v(0) -> half-space wave amplitudes
+    m = (np.linalg.inv(e_hs) @ basis.reshape(4, n * 3)).reshape(4, n, 3).transpose(1, 0, 2)
 
-    # Unknowns x = (u_x, u_z, tau_zz) at the seafloor; tau_xz(0) = 0 (fluid or vacuum above).
-    n = freqs.size
     lhs = np.zeros((n, 3, 3), dtype=complex)
     rhs = np.zeros((n, 3), dtype=complex)
-    lhs[:, :2, :] = m[:, 2:, :][:, :, [0, 1, 3]]
+    lhs[:, :2, :] = m[:, 2:, :]
     # Unit incident upgoing P; its polarization (p, -q) * vp points up (z is down).
     rhs[:, 0] = 1.0
     if model.water is None:
@@ -119,13 +129,15 @@ def seafloor_response(model: OBSModel, ray_p: float, freqs) -> SeafloorResponse:
     else:
         w = model.water
         ew, qw = _fluid_eigenvectors(w.vp, w.rho, ray_p)
-        pw = _propagate(ew, qw, omega, -w.thickness)  # seafloor -> sea surface
-        lhs[:, 2, 1] = pw[:, 1, 0]
-        lhs[:, 2, 2] = pw[:, 1, 1]  # tau_zz at the sea surface vanishes
+        # Seafloor (u_z, tau_zz) basis carried to the sea surface, where tau_zz vanishes.
+        pw = _propagate(
+            ew, qw, omega, -w.thickness, np.repeat(np.eye(2, dtype=complex)[:, None], n, axis=1)
+        )
+        lhs[:, 2, 1] = pw[1, :, 0]
+        lhs[:, 2, 2] = pw[1, :, 1]
     x = np.linalg.solve(lhs, rhs[..., None])[..., 0]
     ux, uz, tzz = x[:, 0], x[:, 1], x[:, 2]
-    v0 = np.stack((ux, uz, np.zeros_like(ux), tzz), axis=1)
-    amplitudes = np.einsum("fij,fj->fi", m, v0)
+    amplitudes = (m @ x[..., None])[..., 0]
 
     return SeafloorResponse(
         freqs=freqs,

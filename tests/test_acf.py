@@ -1,3 +1,5 @@
+import dataclasses
+
 import numpy as np
 import pytest
 from scipy.fft import irfft, next_fast_len, rfftfreq
@@ -14,7 +16,7 @@ from complybay.acf import (
     preset,
     stack_acfs,
 )
-from complybay.forward.acf import synthetic_acf
+from complybay.forward.acf import synthetic_acf, synthetic_acfs, wraparound_fraction
 from complybay.forward.response import seafloor_response
 from complybay.model import LayeredModel, OBSModel, WaterLayer
 
@@ -210,3 +212,47 @@ def test_phase_weighted_stack_suppresses_incoherent_noise():
     noise = np.r_[0:90, 110:400]
     assert np.std(pws[noise]) < np.std(linear[noise])
     assert np.argmax(pws) == 100
+
+
+# --- performance-related behavior -------------------------------------------------
+
+
+def test_shared_response_matches_single_component_calls():
+    model = OBSModel(SOLID, WaterLayer(2.0))
+    lags, acfs = synthetic_acfs(model, 0.06, PROCESSING)
+    for component in ("vertical", "pressure"):
+        lags1, acf = synthetic_acf(model, 0.06, PROCESSING, component=component)
+        np.testing.assert_array_equal(lags, lags1)
+        np.testing.assert_array_equal(acfs[component], acf)
+
+
+@pytest.mark.parametrize("name", ["kim2023", "tauzin2019"])
+def test_band_limit_changes_acf_negligibly(name):
+    """Dropping frequencies the filters suppress below 1e-6 in power leaves the ACF unchanged."""
+    model = OBSModel(SOLID, WaterLayer(2.0))
+    limited = preset(name)
+    full = dataclasses.replace(limited, band_tolerance=0.0)
+    assert np.isinf(full.frequency_limit(np.linspace(0, 10, 100)))
+    for component in ("vertical", "pressure"):
+        _, a = synthetic_acf(model, 0.06, limited, component=component)
+        _, b = synthetic_acf(model, 0.06, full, component=component)
+        np.testing.assert_allclose(a, b, atol=1e-5)
+
+
+def test_frequency_limit_and_validation():
+    freqs = np.linspace(0, 10, 2001)
+    kim = preset("kim2023")
+    limit = kim.frequency_limit(freqs)
+    assert 5.0 < limit < 7.5  # Gaussian a = 5 power falls below 1e-6 near 5.9 Hz, plus 0.4 Hz
+    assert np.isinf(ACFProcessing(filters=()).frequency_limit(freqs))
+    with pytest.raises(ValueError):
+        ACFProcessing(band_tolerance=1.0)
+
+
+def test_wraparound_fraction_shrinks_with_duration():
+    model = OBSModel(SOLID, WaterLayer(2.0))
+    kim = preset("kim2023")
+    short = wraparound_fraction(model, 0.06, kim, duration=70.0)
+    long = wraparound_fraction(model, 0.06, kim, duration=200.0)
+    assert 0 <= long < short
+    assert long < 1e-3
