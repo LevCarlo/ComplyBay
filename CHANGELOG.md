@@ -65,6 +65,16 @@ option that restores the old behavior where one exists.
   all-parameter Gaussian updates, burn-in-only proposal adaptation, global
   uniform jumps (one parameter at a time in one-parameter mode), a temperature setting as the parallel-tempering hook, and
   serial/thread/process chains with reproducible seeds.
+- Inversion workflow (`complybay invert`, `complybay.workflow`): `model.yaml`
+  (model space, priors, constraints, layering, sampler, output) and `obs.yaml`
+  (station with water depth, three-column data files, per-group noise scales,
+  forward settings), validated with explicit errors for unknown keys; run
+  directories with resolved configs plus run metadata, a log with R-hat/ESS and
+  per-group fit, and netCDF files of the chains, the model ensemble with
+  derived quantities, and the posterior predictive (`docs/workflow.md`).
+  Example with synthetic data in `examples/synthetic/`
+  (`tools/make_synthetic_example.py`). New dependencies: xarray, h5netcdf, h5py.
+- Convergence diagnostics: split R-hat and multi-chain effective sample size.
 - Regression baseline of the v0.1 forward outputs
   (`tests/data/legacy_v0_1_forward.npz`, `tools/make_legacy_baseline.py`).
 - Tests against analytic and independent solutions; `docs/forward.md`,

@@ -70,6 +70,8 @@ class DispersionObservation:
     noise_parameter: str | None = None
     wave: str = "rayleigh"
     mode: int = 0
+    algorithm: str = "dunkin"  # disba root-finding settings
+    dc: float = 0.005
 
     def __post_init__(self):
         periods = _vector(self.periods, "periods")
@@ -81,7 +83,14 @@ class DispersionObservation:
         object.__setattr__(self, "sigma", _sigma(self.sigma, periods.size))
 
     def predict(self, model: OBSModel) -> np.ndarray:
-        return phase_velocity(model, self.periods, wave=self.wave, mode=self.mode)
+        return phase_velocity(
+            model,
+            self.periods,
+            wave=self.wave,
+            mode=self.mode,
+            algorithm=self.algorithm,
+            dc=self.dc,
+        )
 
 
 @dataclass(frozen=True)

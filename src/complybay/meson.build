@@ -1,9 +1,11 @@
-py.install_sources('__init__.py', subdir: 'complybay')
+py.install_sources('__init__.py', 'cli.py', subdir: 'complybay')
 
 subdir('acf')
 subdir('forward')
 subdir('inference')
+subdir('io')
 subdir('model')
 subdir('parameterization')
 subdir('inversion')
 subdir('scripts')
+subdir('workflow')

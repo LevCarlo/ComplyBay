@@ -1,0 +1,57 @@
+# Model space for the synthetic example: water (from obs.yaml), a sediment
+# layer with a Vs gradient and constant Vp over a hard basement, fixed crust
+# and mantle. Depths in km below the seafloor, velocities in km/s.
+
+Model:
+  zmax_km: 100.0                      # top of the half-space
+  interfaces:
+    - name: basement
+      depth_km: {parameter: basement.depth}
+      width_km: 0.0                   # hard; sample it with {parameter: ...} and a half_normal prior
+    - name: moho
+      depth_km: 7.0
+  segments:
+    - name: sediment
+      vs: {type: gradient, top: {parameter: sed.vs_top}, bottom: {parameter: sed.vs_bottom}}
+      vp: {type: constant, value: {parameter: sed.vp}}     # sediment Vp sampled directly
+      scaling: {rho: {method: gardner1974}}
+    - name: crust
+      vs: {type: gradient, top: 3.0, bottom: 3.9}          # Vp, rho from Brocher (2005)
+    - name: mantle
+      vs: {type: constant, value: 4.5}
+      scaling:
+        vp: {method: constant_vp_vs, vp_vs: 1.8}
+        rho: {method: constant, rho: 3.35}
+
+Inversion:
+  parameters:
+    - {name: basement.depth, initial: 1.0, prior: {bounds: [0.2, 1.5]}, proposal: {sigma: 0.02}}
+    - {name: sed.vs_top, initial: 0.3, prior: {bounds: [0.05, 0.6]}, proposal: {sigma: 0.02}}
+    - {name: sed.vs_bottom, initial: 0.8, prior: {bounds: [0.2, 1.5]}, proposal: {sigma: 0.03}}
+    - {name: sed.vp, initial: 1.8, prior: {bounds: [1.5, 2.5]}, proposal: {sigma: 0.01}}
+
+Constraints:
+  - {type: vp_vs_range, bounds: [1.6, 40.0]}
+  - {type: vs_range, bounds: [0.05, 1.5], segments: [sediment]}
+  - {type: boundary_non_decreasing_vs}
+  - {type: vp_above_water}            # drop at stations with gas-bearing sediment
+
+Discretization:
+  layers_per_segment: {sediment: 12, crust: 10, mantle: 10}
+
+Sampler:
+  n_steps: 30000
+  burn_in: 8000
+  thin: 10
+  n_chains: 4
+  update: one
+  adapt: true
+  global_jump_interval: 20
+  executor: process
+  seed: 2
+
+Output:
+  max_depth_km: 10.0
+  n_depths: 501
+  n_model_samples: 2000
+  n_predictive_samples: 200

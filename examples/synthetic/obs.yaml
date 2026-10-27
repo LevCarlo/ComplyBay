@@ -1,0 +1,29 @@
+# Station, data and forward settings for the synthetic example.
+# Data files: three columns  x  value  sigma  (see complybay.io.files).
+# The data were made by tools/make_synthetic_example.py.
+
+Station:
+  name: SYN01
+  water: {depth_km: 2.0}              # bathymetry; vp 1.5 km/s, rho 1.03 g/cm^3 by default
+
+Observations:
+  compliance:
+    file: compliance.dat              # frequency (Hz), compliance (1/Pa), sigma
+    noise: {bounds: [-0.5, 0.5]}      # sampled log10 noise scale; omit to use sigma as given
+  dispersion:
+    file: vph.dat                     # period (s), phase velocity (km/s), sigma
+    wave: rayleigh
+    mode: 0
+    noise: {bounds: [-0.5, 0.5]}
+  acf:
+    processing: kim2023
+    ray_p: 0.06                       # s/km
+    window: [0.3, 8.0]                # s
+    components:
+      vertical: {file: acf_z.dat, noise: {bounds: [-0.5, 0.5]}}
+      pressure: {file: acf_p.dat, noise: {bounds: [-0.5, 0.5]}}
+
+Forward:
+  compliance: {wavenumber: exact}
+  dispersion: {algorithm: dunkin, dc: 0.005}
+  acf: {duration: 200.0}

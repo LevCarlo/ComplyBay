@@ -1,5 +1,7 @@
 """Bayesian inference: observations, likelihood and posterior target."""
 
+from complybay.inference.diagnostics import effective_sample_size, split_rhat
+from complybay.inference.ensemble import derived_quantities, model_ensemble
 from complybay.inference.likelihood import (
     GroupFit,
     JointLikelihood,
@@ -38,7 +40,11 @@ __all__ = [
     "PosteriorEvaluation",
     "PosteriorTarget",
     "chain_seeds",
+    "derived_quantities",
+    "effective_sample_size",
+    "model_ensemble",
     "predict",
     "run_chain",
     "run_metropolis",
+    "split_rhat",
 ]

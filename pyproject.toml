@@ -17,12 +17,16 @@ dependencies = [
   "disba>=0.6",
   "bayesbay",
   "pyyaml>=6.0",
+  "xarray>=2023.1",
+  "h5netcdf>=1.1",
+  "h5py>=3.8",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff", "meson-python>=0.16", "meson", "ninja"]
 
 [project.scripts]
+complybay = "complybay.cli:main"
 run_comply_inv = "complybay.scripts.run_inv:main"
 run_joint_inv = "complybay.scripts.run_joint_inv:main"
 

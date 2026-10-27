@@ -25,13 +25,17 @@ ruff check .
 
 ## 🚀 Usage
 
-To run an inversion using a YAML parameter file:
+Invert one station from a model-space file and an observation file:
 
 ```
-run_comply_inv -p your_config.yaml -s STATION_NAME
+cd examples/synthetic
+complybay invert --model model.yaml --obs obs.yaml -o run_posterior
+complybay invert --model model.yaml -o run_prior --prior-only
 ```
 
-Refer to the `examples/Hydrate_Ridge` directory for example configurations and test data.
+See [docs/workflow.md](docs/workflow.md) for the file formats and outputs.
+The v0.1 scripts (`run_comply_inv`, `run_joint_inv`, example in
+`examples/Hydrate_Ridge`) still work but will be removed.
 
 ## 🛠 Development
 
@@ -43,6 +47,8 @@ Refer to the `examples/Hydrate_Ridge` directory for example configurations and t
   for the inversion (segments, interfaces, layering, priors).
 - [docs/inference.md](docs/inference.md): observations, likelihood with noise
   scales, and the posterior target.
+- [docs/workflow.md](docs/workflow.md): configuration files, running an
+  inversion, and the output files.
 - [CHANGELOG.md](CHANGELOG.md): changes, including those that alter results.
 
 ## 📚 Resources
