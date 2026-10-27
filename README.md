@@ -33,6 +33,14 @@ run_comply_inv -p your_config.yaml -s STATION_NAME
 
 Refer to the `examples/Hydrate_Ridge` directory for example configurations and test data.
 
+## 🛠 Development
+
+- [docs/development.md](docs/development.md): code layout, units, testing and
+  reproducibility rules for contributions.
+- [docs/forward.md](docs/forward.md): forward solvers, conventions and how they
+  were validated.
+- [CHANGELOG.md](CHANGELOG.md): changes, including those that alter results.
+
 ## 📚 Resources
 
 * What is seafloor compliance? — Prof. **Wayne Crawford** [homepage]( https://www.ipgp.fr/~crawford/compliance.html)
