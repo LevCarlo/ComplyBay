@@ -39,6 +39,10 @@ Refer to the `examples/Hydrate_Ridge` directory for example configurations and t
   reproducibility rules for contributions.
 - [docs/forward.md](docs/forward.md): forward solvers, conventions and how they
   were validated.
+- [docs/parameterization.md](docs/parameterization.md): model parameterization
+  for the inversion (segments, interfaces, layering, priors).
+- [docs/inference.md](docs/inference.md): observations, likelihood with noise
+  scales, and the posterior target.
 - [CHANGELOG.md](CHANGELOG.md): changes, including those that alter results.
 
 ## 📚 Resources

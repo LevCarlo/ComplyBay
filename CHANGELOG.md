@@ -40,8 +40,27 @@ option that restores the old behavior where one exists.
   `Highpass`, `Lowpass`, `GaussianFilter`), linear and phase-weighted
   stacking, presets `tauzin2019` (unverified starting values) and `kim2023`
   (smoothing-width unit, water level and high-pass order assumed).
-- `synthetic_acfs` (several components from one response) and
-  `wraparound_fraction` (checks that `duration` is long enough).
+- `synthetic_acfs` (several components from one response),
+  `wraparound_fraction` (checks that `duration` is long enough), and the
+  `snr` option that adds a flat noise level as in Kim et al. (2023) Text S4.
+- `complybay.parameterization` (adapted from SeisForge `seisforge.inv`,
+  commit 019d568): segments with constant/gradient/B-spline Vs profiles and an
+  optional sampled Vp/Vs profile, interfaces with sampled depths and sigmoid or
+  smootherstep widths, per-segment Vp/density relations (density from Vp),
+  interface-aware layering with `layering_report`, uniform/normal/half-normal
+  priors, and the theta -> `OBSModel` mapping with a fixed water column
+  (`docs/parameterization.md`). Segments may carry their own sampled `vp`
+  profile (used for sediment) or a `vp_vs` profile.
+- `GeophysicalPrior` (log prior = -inf with a reason for out-of-bounds,
+  invalid-model and constraint failures), hard constraints that can be limited
+  to named segments (`vp_vs_range`, `vs_range`, `monotonic_vs`,
+  `boundary_non_decreasing_vs`, `max_vs_gradient`, `vp_above_water`), and
+  `sample_prior` for exact independent prior samples with rejection
+  diagnostics.
+- `complybay.inference`: compliance, dispersion and ACF observations, a joint
+  Gaussian likelihood with one sampled noise scale (`log10 h`) per data group,
+  Z and P ACFs predicted from one shared response, and `PosteriorTarget` with
+  a prior-only mode (`docs/inference.md`).
 - Regression baseline of the v0.1 forward outputs
   (`tests/data/legacy_v0_1_forward.npz`, `tools/make_legacy_baseline.py`).
 - Tests against analytic and independent solutions; `docs/forward.md`,
@@ -56,6 +75,12 @@ option that restores the old behavior where one exists.
   Dropping those frequencies (`band_tolerance=1e-6`) changes ACFs by less than
   1e-5; `band_tolerance=0` keeps every frequency. The whitening water level now
   refers to the maximum smoothed amplitude within that band.
+- `kim2023` preset follows Kim et al. (2023) Supporting Text S2: whitening by
+  the running mean of the power spectrum (`Whitening(average="power")`) and no
+  water level, instead of the amplitude average and 0.01 water level assumed
+  before. The whitening window now has 2N + 1 samples for width W = 2N df for
+  both averages (it had round(W / df) samples), which shifts `tauzin2019`
+  ACFs slightly.
 - Import name is now `complybay` (was `ComplyBay`), in a `src/` layout.
 - Build uses `meson-python`; `setup.py` and `numpy.distutils` are gone, and
   the package installs on Python 3.10-3.13 with NumPy 2.

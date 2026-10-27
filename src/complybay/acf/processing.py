@@ -9,8 +9,11 @@ selection, stacking) stay outside it.
 The flow follows the spectral-whitening autocorrelation of Tauzin, Pham &
 Tkalcic (2019, GJI 217, 1-24, doi:10.1093/gji/ggz002):
 
-1. whiten: divide the spectrum by a running mean of its amplitude
-   (``Whitening.width`` in Hz), floored at ``water_level`` times its maximum;
+1. whiten: divide the power spectrum by its running mean over
+   ``Whitening.width`` Hz (2N + 1 frequency samples with width = 2N df), or
+   divide the amplitude by the running mean of the amplitude
+   (``average="amplitude"``); the divisor is floored at ``water_level`` times
+   its maximum;
 2. autocorrelate: power spectrum, inverse FFT, keep lags 0..``max_lag``;
 3. filter: multiply the power spectrum by the zero-phase response of every
    filter in ``filters``, in order (equivalent to filtering the ACF forward
@@ -23,10 +26,9 @@ dropped before whitening, for data and synthetics alike, so synthetics need
 not be computed there (:meth:`ACFProcessing.frequency_limit`).
 
 :data:`PRESETS` holds two flows. ``tauzin2019`` uses unverified starting
-values. ``kim2023`` takes the Z-/P-ACF settings stated in Kim et al. (2023,
-JGR 128, e2023JB027616, Fig. 1 and Sec. 2.2); the unit of their smoothing
-width, the water level and the high-pass order are not given in the main
-text (they are in its Supporting Text S2) and are assumed here.
+values. ``kim2023`` takes the Z-/P-ACF settings of Kim et al. (2023, JGR 128,
+e2023JB027616, Fig. 1, Sec. 2.2 and Supporting Text S2); only the order of the
+0.5 Hz high-pass is assumed.
 """
 
 from __future__ import annotations
@@ -43,16 +45,37 @@ from scipy.signal.windows import tukey
 
 @dataclass(frozen=True)
 class Whitening:
-    """Running-mean spectral whitening."""
+    """Running-mean spectral whitening.
+
+    ``average="power"`` divides |X|^2 by its running mean (Kim et al., 2023,
+    Supporting Eq. S1-S2); ``average="amplitude"`` divides |X| by the running
+    mean of |X| and squares the result. ``width`` is the full window width in
+    Hz, sampled by 2N + 1 points with N = round(width / (2 df)).
+    """
 
     width: float = 0.5  # Hz
-    water_level: float = 0.01  # fraction of the maximum smoothed amplitude
+    water_level: float = 0.01  # fraction of the maximum running mean
+    average: Literal["power", "amplitude"] = "amplitude"
 
     def __post_init__(self):
         if self.width <= 0:
             raise ValueError("Whitening width must be positive.")
         if not 0 <= self.water_level < 1:
             raise ValueError("water_level must be in [0, 1).")
+        if self.average not in ("power", "amplitude"):
+            raise ValueError(f"Unknown whitening average {self.average!r}.")
+
+    def whitened_power(self, amplitude: np.ndarray, df: float, in_band: np.ndarray) -> np.ndarray:
+        """Whitened power spectrum from the amplitude spectrum on a grid of spacing ``df``.
+
+        The water level refers to the maximum running mean inside ``in_band``.
+        """
+        half = int(round(self.width / (2 * df)))
+        values = amplitude**2 if self.average == "power" else amplitude
+        smooth = uniform_filter1d(values, size=2 * half + 1, mode="nearest")
+        floor = max(self.water_level * smooth[in_band].max(), np.finfo(float).tiny)
+        whitened = values / np.maximum(smooth, floor)
+        return whitened if self.average == "power" else whitened**2
 
 
 class Filter(Protocol):
@@ -201,13 +224,15 @@ PRESETS: dict[str, ACFProcessing] = {
         zero_lag_taper=0.5,
         normalize="max",
     ),
-    # Kim et al. (2023) Z-/P-ACF: Gaussian a = 5 then a 0.5 Hz high-pass, smoothing
-    # width 0.8 (taken as Hz), normalized at t = 0, zero lag left in place (they
-    # exclude it from the fitting window instead). Water level and high-pass order
-    # are assumptions.
+    # Kim et al. (2023) Z-/P-ACF (Supporting Text S2): power spectrum divided by its
+    # running mean over W = 0.8 Hz, no water level, Gaussian a = 5, then a 0.5 Hz
+    # high-pass after autocorrelation, normalized at t = 0; zero lag left in place
+    # (they exclude it from the fitting window). The high-pass order is assumed.
+    # Their data window: 70 s from 10 s before P, Tukey cosine fraction 0.2
+    # (acf_from_trace(..., taper_fraction=0.2)).
     "kim2023": ACFProcessing(
         max_lag=30.0,
-        whitening=Whitening(width=0.8, water_level=0.01),
+        whitening=Whitening(width=0.8, water_level=0.0, average="power"),
         filters=(GaussianFilter(a=5.0), Highpass(freq=0.5, corners=2)),
         zero_lag_taper=0.0,
         normalize="zero_lag",
@@ -236,13 +261,9 @@ def acf_from_spectrum(
 
     amplitude = np.where(in_band, np.abs(spectrum), 0.0)
     if processing.whitening is not None:
-        w = processing.whitening
-        size = max(1, int(round(w.width / df)))
-        smooth = uniform_filter1d(amplitude, size=size, mode="nearest")
-        # The water level refers to the band that reaches the ACF, not to dropped noise.
-        floor = w.water_level * smooth[in_band].max()
-        amplitude = amplitude / np.maximum(smooth, floor if floor > 0 else np.finfo(float).tiny)
-    power = amplitude**2
+        power = processing.whitening.whitened_power(amplitude, df, in_band)
+    else:
+        power = amplitude**2
     for f in processing.filters:
         power = power * f.power_response(freqs)
 

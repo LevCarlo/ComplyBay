@@ -256,3 +256,40 @@ def test_wraparound_fraction_shrinks_with_duration():
     long = wraparound_fraction(model, 0.06, kim, duration=200.0)
     assert 0 <= long < short
     assert long < 1e-3
+
+
+# --- Kim et al. (2023) Supporting Text S2 / S4 ---------------------------------
+
+
+@pytest.mark.parametrize("average", ["power", "amplitude"])
+def test_whitening_uses_2n_plus_1_point_running_mean(average):
+    rng = np.random.default_rng(3)
+    amplitude = rng.uniform(0.5, 2.0, 400)
+    df, width = 0.01, 0.2  # N = 10, window of 21 samples
+    w = Whitening(width=width, water_level=0.0, average=average)
+    values = amplitude**2 if average == "power" else amplitude
+    i = 200
+    expected = values[i] / values[i - 10 : i + 11].mean()
+    if average == "amplitude":
+        expected = expected**2
+    got = w.whitened_power(amplitude, df, np.ones(400, bool))
+    assert got[i] == pytest.approx(expected, rel=1e-12)
+
+
+def test_kim2023_follows_supporting_text_s2():
+    kim = preset("kim2023")
+    assert kim.whitening == Whitening(width=0.8, water_level=0.0, average="power")
+    assert kim.filters == (GaussianFilter(5.0), Highpass(0.5, corners=2))
+
+
+def test_snr_noise_lowers_acf_amplitude():
+    model = OBSModel(SOLID, WaterLayer(2.0))
+    kim = preset("kim2023")
+    lags, clean = synthetic_acf(model, 0.06, kim)
+    _, almost_clean = synthetic_acf(model, 0.06, kim, snr=1e6)
+    np.testing.assert_allclose(almost_clean, clean, atol=1e-5)
+    late = lags > 0.3
+    peaks = [np.abs(synthetic_acf(model, 0.06, kim, snr=s)[1][late]).max() for s in (10, 3, 1.5)]
+    assert np.abs(clean[late]).max() > peaks[0] > peaks[1] > peaks[2]
+    with pytest.raises(ValueError):
+        synthetic_acf(model, 0.06, kim, snr=1.0)

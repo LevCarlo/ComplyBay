@@ -53,6 +53,25 @@ def _band_limited_spectra(model, ray_p, processing, components, freqs):
     return spectra
 
 
+def add_noise_level(spectrum: np.ndarray, n_fft: int, snr: float) -> np.ndarray:
+    """Amplitude spectrum with a flat noise level added for signal-to-noise ratio ``snr``.
+
+    Kim et al. (2023, Supporting Text S4): with SNR^2 = sum(s^2 + n^2) / sum(n^2)
+    and white noise, Parseval gives the noise amplitude per frequency
+    N = sqrt(sum_k |S_k|^2 / (L (SNR^2 - 1))), which is added to |S|. Here the
+    sum runs over the two-sided DFT of length L = ``n_fft`` built from the
+    one-sided ``spectrum``, restricted to its non-zero (processed) band; the
+    synthetic source is a unit impulse. Both are assumptions the paper leaves open.
+    """
+    if snr <= 1:
+        raise ValueError("snr must exceed 1.")
+    power = np.abs(spectrum) ** 2
+    # Two-sided sum: every one-sided bin twice except zero frequency (and Nyquist).
+    two_sided = 2 * power.sum() - power[0] - (power[-1] if n_fft % 2 == 0 else 0.0)
+    noise = np.sqrt(two_sided / (n_fft * (snr**2 - 1)))
+    return np.where(spectrum != 0, np.abs(spectrum) + noise, 0.0)
+
+
 def synthetic_acfs(
     model: OBSModel,
     ray_p: float,
@@ -61,14 +80,22 @@ def synthetic_acfs(
     *,
     dt: float = DEFAULT_DT,
     duration: float = DEFAULT_DURATION,
+    snr: float | None = None,
 ) -> tuple[np.ndarray, dict[str, np.ndarray]]:
-    """(lags, {component: ACF}) from one seafloor response shared by all components."""
+    """(lags, {component: ACF}) from one seafloor response shared by all components.
+
+    ``snr`` (observed RMS signal-to-noise ratio) adds the flat noise level of
+    :func:`add_noise_level` before processing, so the synthetic amplitudes drop
+    the way noisy observed ACFs do; ``None`` gives noise-free synthetics.
+    """
     if duration <= 2 * processing.max_lag:
         raise ValueError("duration must be longer than twice max_lag.")
     n_fft, freqs = _fft_grid(dt, duration)
     spectra = _band_limited_spectra(model, ray_p, processing, components, freqs)
     acfs = {}
     for component, spectrum in spectra.items():
+        if snr is not None:
+            spectrum = add_noise_level(spectrum, n_fft, snr)
         lags, acfs[component] = acf_from_spectrum(spectrum, dt, n_fft, processing)
     return lags, acfs
 
@@ -81,9 +108,12 @@ def synthetic_acf(
     component: Component = "vertical",
     dt: float = DEFAULT_DT,
     duration: float = DEFAULT_DURATION,
+    snr: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """(lags, ACF) for one component and slowness ``ray_p`` (s/km)."""
-    lags, acfs = synthetic_acfs(model, ray_p, processing, (component,), dt=dt, duration=duration)
+    """(lags, ACF) for one component and slowness ``ray_p`` (s/km); see :func:`synthetic_acfs`."""
+    lags, acfs = synthetic_acfs(
+        model, ray_p, processing, (component,), dt=dt, duration=duration, snr=snr
+    )
     return lags, acfs[component]
 
 

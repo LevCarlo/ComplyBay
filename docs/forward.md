@@ -81,11 +81,21 @@ Presets live in `acf.PRESETS`:
   doi:10.1093/gji/ggz002); its numbers are unverified starting values
   (band-pass 0.5-4 Hz, sin^2 zero-lag taper, normalized to the maximum).
 - `kim2023`: the Z-/P-ACF settings of Kim et al. (2023, JGR 128,
-  e2023JB027616): Gaussian low-pass a = 5 followed by a 0.5 Hz high-pass
-  (half-power band about 0.55-1.7 Hz), smoothing width 0.8, normalized at
-  t = 0, zero lag not tapered. The smoothing-width unit (taken as Hz), water
-  level and high-pass order are assumptions until checked against their
-  Supporting Text S2.
+  e2023JB027616, Supporting Text S2): power spectrum divided by its running
+  mean over W = 0.8 Hz (2N + 1 samples, W = 2N df), no water level, Gaussian
+  low-pass a = 5, then a 0.5 Hz high-pass (half-power band about
+  0.55-1.7 Hz), normalized at t = 0, zero lag not tapered. Only the high-pass
+  order (2) is assumed. Their data window is 70 s from 10 s before P with a
+  Tukey taper of cosine fraction 0.2 (`acf_from_trace(..., taper_fraction=0.2)`).
+
+`Whitening(average="power")` divides |X|^2 by its running mean (Kim);
+`average="amplitude"` divides |X| by the running mean of |X| and squares.
+
+`synthetic_acfs(..., snr=...)` follows Kim et al. (2023, Supporting Text S4):
+noise lowers the amplitude of zero-lag-normalized ACFs, so a flat noise
+amplitude N = sqrt(sum |S|^2 / (L (SNR^2 - 1))) is added to the synthetic
+amplitude spectrum before processing. The sum is taken over the processed band
+of a unit-impulse synthetic; the paper leaves both choices open.
 
 The narrower band is what makes `kim2023` ACFs look smoother; normalizing at
 t = 0 also keeps reflection amplitudes meaningful, whereas normalizing to the
@@ -115,5 +125,4 @@ polarity of water multiples on vertical and pressure, and agreement of the
 trace and spectrum processing paths on the same impulse response.
 
 Not yet done: comparison with rein-acfcompute (GPL-3.0: run it locally as a
-reference only, do not copy code) and checking the `kim2023` assumptions against their Supporting Text S2;
-attenuation (Q) in any solver.
+reference only, do not copy code); attenuation (Q) in any solver.
