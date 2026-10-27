@@ -64,6 +64,13 @@ class PosteriorTarget:
             likelihood,
         )
 
+    def log_prior_and_likelihood(self, theta) -> tuple[float, float]:
+        """(log prior, log likelihood) for the samplers; (-inf, -inf) outside the prior."""
+        result = self.evaluate(theta)
+        if not np.isfinite(result.log_prior):
+            return -np.inf, -np.inf
+        return result.log_prior, result.log_likelihood
+
     def __call__(self, theta) -> float:
         """log posterior (log prior with ``prior_only``); what a sampler calls."""
         return self.evaluate(theta).log_posterior

@@ -57,3 +57,40 @@ see the model space it explores.
 
 Cost of one evaluation (30 solid layers, 12 frequencies, 8 periods, Z + P
 ACF with `kim2023`): about 5.4 ms.
+
+## Sampler
+
+`run_metropolis(target, initial_thetas, MetropolisConfig(...), seed=..., executor=...)`
+runs independent random-walk Metropolis chains (adapted from SeisForge
+`seisforge.inv.samplers`, commit 019d568):
+
+| option | meaning |
+|---|---|
+| `n_steps`, `burn_in`, `thin` | chain length; samples kept after burn-in, every `thin` steps |
+| `proposal_sigma`, `bounds` | Gaussian step per parameter; proposals outside the box are rejected |
+| `update` | `"one"`: perturb one random parameter per step (default); `"all"`: all at once |
+| `adapt` | tune the sigmas during burn-in only (towards 0.44 / 0.234 acceptance), then freeze; with `"all"` only a common factor adapts |
+| `global_jump_interval` | every k-th step propose uniformly over the whole box (jumps between separated modes) |
+| `temperature` | accept on d(log prior) + d(log likelihood) / T; T = 1 is the posterior. The hook for parallel tempering |
+
+`executor="process"` runs chains in parallel processes (the posterior target
+is picklable); per-chain seeds are spawned from `seed`, so serial, thread and
+process runs give identical samples. Start chains from
+`sample_prior(prior, n_chains).theta` for diverse valid starting points.
+
+First trial on the synthetic test model (9 parameters, noise-free data,
+4 chains x 8000 steps, about 52 s wall in 4 processes): chains had not
+converged. Their medians and best log posteriors differed, basement depth,
+transition width and sediment Vs trade off along a narrow ridge, and all noise
+scales went to their lower bound because noise-free data are best fitted with
+h -> 0. Synthetic tests need noise added, longer chains, and a convergence
+check (R-hat, effective sample size) before results are read.
+
+The demo `examples/inversion_demo.ipynb` (noisy synthetic data from a finer
+layering, hard basement, 4 model + 4 noise parameters, 4 chains x 30 000
+steps, about 3.5 min): with `global_jump_interval=20` all chains reach the same
+best log posterior and recover the true values within their 90 % intervals;
+split R-hat is 1.09-1.12 for the model parameters and about 1.00 for the
+noise scales. Without the global jumps one chain stayed in a wrong mode with
+the basement near its 1.5 km bound. Sediment Vs at top and bottom trade off
+(compliance constrains a depth average) and mix slowest.

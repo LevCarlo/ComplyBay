@@ -61,6 +61,10 @@ option that restores the old behavior where one exists.
   Gaussian likelihood with one sampled noise scale (`log10 h`) per data group,
   Z and P ACFs predicted from one shared response, and `PosteriorTarget` with
   a prior-only mode (`docs/inference.md`).
+- Metropolis sampler (`run_metropolis`, adapted from SeisForge): one- or
+  all-parameter Gaussian updates, burn-in-only proposal adaptation, global
+  uniform jumps (one parameter at a time in one-parameter mode), a temperature setting as the parallel-tempering hook, and
+  serial/thread/process chains with reproducible seeds.
 - Regression baseline of the v0.1 forward outputs
   (`tests/data/legacy_v0_1_forward.npz`, `tools/make_legacy_baseline.py`).
 - Tests against analytic and independent solutions; `docs/forward.md`,

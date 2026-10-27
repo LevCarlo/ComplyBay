@@ -3,5 +3,6 @@ py.install_sources(
   'likelihood.py',
   'observations.py',
   'posterior.py',
+  'samplers.py',
   subdir: 'complybay/inference',
 )
