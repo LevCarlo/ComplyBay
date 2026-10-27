@@ -17,8 +17,12 @@ py.extension_module(
 py.install_sources(
   '__init__.py',
   'complykernel.py',
+  'dispersion.py',
+  'acf.py',
+  'compliance.py',
   'k_solver.py',
   'ncomp_fortran.py',
   'ncomp_matlab_py.py',
+  'response.py',
   subdir: 'complybay/forward',
 )
