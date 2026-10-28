@@ -78,7 +78,7 @@ Output:
 | `resolved_model.yaml`, `resolved_obs.yaml` | the inputs with a `Run` block: version, git commit, time, files, station, parameter names, seed |
 | `run.log` | settings, progress, a parameter table (median, 5-95 %, R-hat, ESS), a warning when R-hat > 1.1, and chi2/N and h of the best sample per data group |
 | `<stage>_mcmc.nc` | `theta` (chain, draw, parameter), `log_prior`, `log_likelihood`, `accepted` (chain, step), `acceptance_rate`, adapted `proposal_sigma`, `initial_theta`, `rhat`, `ess` |
-| `<stage>_model.nc` | `vs`, `vp`, `rho`, `vp_vs` (sample, depth) and their quantiles (5, 16, 50, 84, 95 %); per sample `depth.<interface>`, `width.<interface>`, `thickness.<segment>`, `tp2.<segment>` / `ts2.<segment>` (vertical two-way P / S time), `vs_mean.<segment>` |
+| `<stage>_model.nc` | `vs`, `vp`, `rho`, `vp_vs` (sample, depth) and their quantiles (5, 16, 50, 84, 95 %); per sample `depth.<interface>`, `width.<interface>`, `thickness.<segment>`, `tp2.<segment>` / `ts2.<segment>` (vertical two-way P / S time), `vs_mean.<segment>` (travel-time average), `vs_sqrt_mean.<segment>`, `vs_mid.<segment>` |
 | `posterior_predictive.nc` | per data group: observed values, sigma, fitted mask, predictions of `n_predictive_samples` samples, the best sample's prediction; its chi2, N and h in the attributes |
 
 `<stage>` is `prior` and/or `posterior`. Open with

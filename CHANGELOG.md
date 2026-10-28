@@ -81,6 +81,11 @@ option that restores the old behavior where one exists.
   `<stage>_mcmc.nc`. `examples/synthetic/model.yaml` now uses it (R-hat
   <= 1.014 and ESS 490-2300 instead of 1.09-1.12 and 40-55 with `one`); the
   `Sampler.update` default stays `one`.
+- Derived quantities `vs_sqrt_mean.<segment>` ((mean of sqrt Vs)^2) and
+  `vs_mid.<segment>` (Vs at mid-depth) in `<stage>_model.nc`: the sediment
+  Vs summaries best fixed in the synthetic tests.
+- `tools/data_subset_test.py`: inverts the synthetic example with every
+  combination of data groups; results in `docs/synthetic_tests.md`.
 - Regression baseline of the v0.1 forward outputs
   (`tests/data/legacy_v0_1_forward.npz`, `tools/make_legacy_baseline.py`).
 - Tests against analytic and independent solutions; `docs/forward.md`,

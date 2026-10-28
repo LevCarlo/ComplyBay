@@ -49,6 +49,8 @@ The v0.1 scripts (`run_comply_inv`, `run_joint_inv`, example in
   scales, and the posterior target.
 - [docs/workflow.md](docs/workflow.md): configuration files, running an
   inversion, and the output files.
+- [docs/synthetic_tests.md](docs/synthetic_tests.md): what each data type
+  constrains, from inversions of a known model.
 - [CHANGELOG.md](CHANGELOG.md): changes, including those that alter results.
 
 ## 📚 Resources

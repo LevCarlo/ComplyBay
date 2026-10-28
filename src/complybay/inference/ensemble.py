@@ -8,9 +8,18 @@ constrained, so every segment also reports
 - ``tp2``: vertical two-way P time, 2 * integral dz / Vp  (s),
 - ``ts2``: vertical two-way S time, 2 * integral dz / Vs  (s),
 - ``vs_mean``: travel-time average Vs, thickness / integral dz / Vs  (km/s),
+- ``vs_sqrt_mean``: (integral sqrt(Vs) dz / thickness)^2  (km/s),
+- ``vs_mid``: Vs at the segment's mid-depth  (km/s),
 
 integrated over the segment's depth interval of the blended model with
 Gauss-Legendre quadrature; plus every interface depth and width.
+
+The travel-time average weights the slowest part (often the poorly resolved
+top of a sediment) most. In the synthetic tests (``docs/synthetic_tests.md``)
+a sediment Vs gradient was fixed best near mid-depth, where the trading end
+values pivot, and among power means by the sqrt mean (+-6 % against +-16 % for
+``vs_mean``); the pivot depth depends on the data, so these two are
+summaries to compare, not a rule.
 """
 
 from __future__ import annotations
@@ -41,6 +50,9 @@ def derived_quantities(model: ParameterizedModel) -> dict[str, float]:
         out[f"tp2.{name}"] = float(2.0 * half * np.sum(_WEIGHTS / vp))
         out[f"ts2.{name}"] = float(2.0 * s_time)
         out[f"vs_mean.{name}"] = float(segment.thickness / s_time)
+        out[f"vs_sqrt_mean.{name}"] = float((0.5 * np.sum(_WEIGHTS * np.sqrt(vs))) ** 2)
+        vs_mid, _, _ = model.evaluate_properties(np.array([segment.top + half]))
+        out[f"vs_mid.{name}"] = float(vs_mid[0])
     return out
 
 

@@ -10,7 +10,12 @@ from complybay.cli import main
 from complybay.inference.diagnostics import effective_sample_size, split_rhat
 from complybay.inference.ensemble import derived_quantities
 from complybay.io import dump_yaml, load_yaml, read_three_columns, write_three_columns
-from complybay.parameterization import ConstantProfile, ParameterizedModel, Segment
+from complybay.parameterization import (
+    ConstantProfile,
+    GradientProfile,
+    ParameterizedModel,
+    Segment,
+)
 from complybay.workflow import build_inversion, run_inversion
 from complybay.workflow.config import processing_from_config
 
@@ -114,6 +119,26 @@ def test_derived_quantities_of_constant_segments():
     assert d["tp2.sediment"] == pytest.approx(2 * 0.5 / 1.6)
     assert d["ts2.sediment"] == pytest.approx(2 * 0.5 / 0.4)
     assert d["vs_mean.sediment"] == pytest.approx(0.4)
+
+
+def test_derived_quantities_of_a_linear_vs_gradient():
+    # Analytic integrals of Vs = t + (b - t) z / H; 32-point Gauss-Legendre on these
+    # smooth integrands is exact to ~1e-10, so the tolerances only allow rounding.
+    t, b, h = 0.15, 0.6, 0.6
+    model = ParameterizedModel(
+        (
+            Segment(0.0, h, GradientProfile(t, b), vp=ConstantProfile(1.75), name="sediment"),
+            Segment(h, 10.0, ConstantProfile(3.5), name="crust"),
+        )
+    )
+    d = derived_quantities(model)
+    ts2 = 2 * h * np.log(b / t) / (b - t)
+    assert d["ts2.sediment"] == pytest.approx(ts2, rel=1e-6)
+    assert d["vs_mean.sediment"] == pytest.approx(2 * h / ts2, rel=1e-6)
+    sqrt_mean = (2 / 3 * (b**1.5 - t**1.5) / (b - t)) ** 2
+    assert d["vs_sqrt_mean.sediment"] == pytest.approx(sqrt_mean, rel=1e-8)
+    assert d["vs_mid.sediment"] == pytest.approx((t + b) / 2)
+    assert d["vs_mid.crust"] == pytest.approx(3.5)
 
 
 def test_rhat_and_ess_on_known_processes():
