@@ -144,3 +144,83 @@ def test_posterior_chain_climbs_towards_the_truth():
     config = MetropolisConfig(400, target.prior.parameterization.proposal_sigmas(), (lower, upper))
     chain = run_chain(target, start, config, seed=1)
     assert chain.log_posterior[-1] > target(start) + 10
+
+
+# A narrow ridge: correlation 0.99 between parameters of very different scales.
+RIDGE_STD = np.array([1.0, 0.01])
+RIDGE_CORR = 0.99
+RIDGE_COV = np.array(
+    [
+        [RIDGE_STD[0] ** 2, RIDGE_CORR * RIDGE_STD[0] * RIDGE_STD[1]],
+        [RIDGE_CORR * RIDGE_STD[0] * RIDGE_STD[1], RIDGE_STD[1] ** 2],
+    ]
+)
+RIDGE_PRECISION = np.linalg.inv(RIDGE_COV)
+RIDGE_BOX = (np.array([-10.0, -0.1]), np.array([10.0, 0.1]))
+
+
+def ridge(theta):
+    return float(-0.5 * theta @ RIDGE_PRECISION @ theta)
+
+
+def _ridge_chain(update, seed=0):
+    config = MetropolisConfig(
+        30000, [0.5, 0.005], RIDGE_BOX, burn_in=10000, update=update, adapt=True
+    )
+    return run_chain(LogProbTarget(ridge), [0.0, 0.0], config, seed=seed)
+
+
+def test_covariance_proposal_learns_a_correlated_ridge():
+    # Analytic check: the frozen proposal is 2.38^2 / d * C times a tuned factor of
+    # order 1, so its correlation must match the target's and the samples must
+    # reproduce the known covariance.
+    chain = _ridge_chain("covariance")
+    proposal = chain.proposal_covariance
+    corr = proposal[0, 1] / np.sqrt(proposal[0, 0] * proposal[1, 1])
+    assert corr == pytest.approx(RIDGE_CORR, abs=0.005)
+    ratio = proposal / RIDGE_COV
+    assert 0.3 < ratio[0, 0] / (2.38**2 / 2) < 3  # Robbins-Monro factor stays O(1)
+    np.testing.assert_allclose(chain.proposal_sigma, np.sqrt(np.diag(proposal)))
+    np.testing.assert_allclose(np.cov(chain.samples.T), RIDGE_COV, rtol=0.15, atol=1e-6)
+    assert chain.acceptance_rate(after_burn_in=10000) == pytest.approx(0.234, abs=0.08)
+
+
+def test_covariance_proposal_mixes_faster_than_one_parameter_updates():
+    from complybay.inference import effective_sample_size
+
+    one = _ridge_chain("one")
+    cov = _ridge_chain("covariance")
+    ess_one = effective_sample_size(one.samples[None, :, 0])
+    ess_cov = effective_sample_size(cov.samples[None, :, 0])
+    # Along a 0.99 ridge an axis-aligned step must be ~sqrt(1 - 0.99^2) ~ 0.14 of the
+    # marginal width, so one-parameter updates are several times slower.
+    assert ess_cov > 3 * ess_one
+
+
+def test_covariance_proposal_is_frozen_after_burn_in_and_reproducible():
+    config = MetropolisConfig(
+        3000,
+        [0.5, 0.005],
+        RIDGE_BOX,
+        burn_in=1000,
+        update="covariance",
+        adapt=True,
+        covariance_start=400,
+        global_jump_interval=20,
+    )
+    a = run_chain(LogProbTarget(ridge), [0.0, 0.0], config, seed=3)
+    b = run_chain(LogProbTarget(ridge), [0.0, 0.0], config, seed=3)
+    np.testing.assert_array_equal(a.samples, b.samples)
+    np.testing.assert_array_equal(a.proposal_covariance, b.proposal_covariance)
+    assert np.all(a.samples >= RIDGE_BOX[0]) and np.all(a.samples <= RIDGE_BOX[1])
+
+
+def test_covariance_configuration_errors():
+    with pytest.raises(ValueError, match="adapt=True"):
+        MetropolisConfig(100, 1.0, BOX, burn_in=50, update="covariance")
+    with pytest.raises(ValueError, match="covariance_start < burn_in"):
+        MetropolisConfig(
+            100, 1.0, BOX, burn_in=50, update="covariance", adapt=True, covariance_start=60
+        )
+    with pytest.raises(ValueError, match="'covariance' only"):
+        MetropolisConfig(100, 1.0, BOX, burn_in=50, covariance_start=10)

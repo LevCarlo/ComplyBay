@@ -68,10 +68,37 @@ runs independent random-walk Metropolis chains (adapted from SeisForge
 |---|---|
 | `n_steps`, `burn_in`, `thin` | chain length; samples kept after burn-in, every `thin` steps |
 | `proposal_sigma`, `bounds` | Gaussian step per parameter; proposals outside the box are rejected |
-| `update` | `"one"`: perturb one random parameter per step (default); `"all"`: all at once |
+| `update` | `"one"`: perturb one random parameter per step (default); `"all"`: all at once; `"covariance"`: adaptive Metropolis, all at once from a learned covariance (below) |
 | `adapt` | tune the sigmas during burn-in only (towards 0.44 / 0.234 acceptance), then freeze; with `"all"` only a common factor adapts |
+| `covariance_start` | `"covariance"` only: step at which the covariance proposal takes over (default `burn_in // 2`) |
 | `global_jump_interval` | every k-th step propose uniformly over the whole box (jumps between separated modes) |
 | `temperature` | accept on d(log prior) + d(log likelihood) / T; T = 1 is the posterior. The hook for parallel tempering |
+
+### Covariance proposals (`update="covariance"`)
+
+Adaptive Metropolis (Haario, Saksman & Tamminen 2001) confined to burn-in:
+
+1. Steps `0 .. covariance_start`: adaptive one-parameter updates (target
+   acceptance 0.44), which find the scale of each parameter.
+2. From `covariance_start // 2` to the end of burn-in, the chain's states feed
+   a running mean and covariance C (Welford update).
+3. From `covariance_start`: proposals theta' = theta + L z, L L^T =
+   s^2 C + diag((1e-4 (upper - lower))^2), with s starting at 2.38 / sqrt(d)
+   (Gelman, Roberts & Gilks 1996) and tuned by Robbins-Monro towards 0.234.
+   The diagonal floor (assumed) keeps C positive definite.
+4. At the end of burn-in L is frozen: the stored samples are an ordinary
+   random-walk Metropolis chain, saved with `proposal_covariance` in
+   `<stage>_mcmc.nc`.
+
+Each chain learns its own C, so a chain that is still in a wrong mode at the
+end of burn-in keeps a covariance of that mode; the global jumps (one
+parameter, as for `"one"`) and R-hat across chains still matter. Burn-in must
+be long enough for step 1 to reach the main mode and for step 2 to see the
+ridge: a few thousand steps for about ten parameters.
+
+On a 2-D Gaussian with correlation 0.99 (test suite) the effective sample size
+of 2000 kept draws is about 24 with `"one"`, 120 with `"all"` and 2700 with
+`"covariance"`.
 
 `executor="process"` runs chains in parallel processes (the posterior target
 is picklable); per-chain seeds are spawned from `seed`, so serial, thread and

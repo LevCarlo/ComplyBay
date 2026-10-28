@@ -57,8 +57,9 @@ Sampler:
   burn_in: 8000
   thin: 10
   n_chains: 4
-  update: one             # or all
+  update: one             # or all, or covariance (adaptive Metropolis)
   adapt: true             # tune proposal sigmas during burn-in only
+  covariance_start: 4000  # covariance only; default burn_in // 2
   global_jump_interval: 20
   executor: process       # serial, thread, process
   seed: 2
@@ -88,10 +89,13 @@ the robust summaries when profile end values trade off (see
 ## The synthetic example as shipped
 
 `complybay invert --model model.yaml --obs obs.yaml -o run` in
-`examples/synthetic` takes about 3.7 min (4 processes). All true values lie in
-the 90 % intervals, and the noise scales are near 1 (ESS 600-2000), but the
-model parameters have R-hat 1.09-1.12 and an ESS of only 40-55 out of 8800
-kept draws, so the log warns that the chains are not converged. Strongly
-correlated parameters (sediment thickness, Vp and the Vs end values) make the
-one-parameter random walk slow; longer chains, or correlated (covariance-
-adapted) proposals, are needed for production use.
+`examples/synthetic` (4 model + 4 noise parameters, 4 chains x 30 000 steps,
+burn-in 8000, `update: covariance`) takes about 3.3 min in 4 processes. All
+true values lie in the 90 % intervals, R-hat is at most 1.014 and the ESS
+of the 8800 kept draws is 490-2300 per parameter (lowest for the sediment Vs
+end values, which trade off).
+
+With `update: one` and otherwise the same settings, the model parameters had
+R-hat 1.09-1.12 and ESS 40-55, and the log warned that the chains were not
+converged: sediment thickness, Vp and the Vs end values are strongly
+correlated, and one-parameter steps cross that ridge slowly.

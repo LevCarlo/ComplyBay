@@ -44,7 +44,7 @@ Sampler:
   burn_in: 8000
   thin: 10
   n_chains: 4
-  update: one
+  update: covariance      # adaptive Metropolis; 'one' mixes ~20-50x slower here
   adapt: true
   global_jump_interval: 20
   executor: process

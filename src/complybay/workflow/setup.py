@@ -87,6 +87,7 @@ class InversionSetup:
             update=s.update,
             global_jump_interval=s.global_jump_interval,
             adapt=s.adapt,
+            covariance_start=s.covariance_start,
             temperature=s.temperature,
         )
 

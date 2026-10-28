@@ -75,6 +75,12 @@ option that restores the old behavior where one exists.
   Example with synthetic data in `examples/synthetic/`
   (`tools/make_synthetic_example.py`). New dependencies: xarray, h5netcdf, h5py.
 - Convergence diagnostics: split R-hat and multi-chain effective sample size.
+- `update="covariance"` (`Sampler.update: covariance`): adaptive Metropolis
+  with a covariance learned during burn-in and frozen afterwards
+  (`covariance_start`); the frozen proposal covariance is saved in
+  `<stage>_mcmc.nc`. `examples/synthetic/model.yaml` now uses it (R-hat
+  <= 1.014 and ESS 490-2300 instead of 1.09-1.12 and 40-55 with `one`); the
+  `Sampler.update` default stays `one`.
 - Regression baseline of the v0.1 forward outputs
   (`tests/data/legacy_v0_1_forward.npz`, `tools/make_legacy_baseline.py`).
 - Tests against analytic and independent solutions; `docs/forward.md`,

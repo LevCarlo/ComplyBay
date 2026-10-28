@@ -106,6 +106,7 @@ class SamplerSettings:
     n_chains: int = 4
     update: str = "one"
     adapt: bool = True
+    covariance_start: int | None = None  # update: covariance; default burn_in // 2
     global_jump_interval: int | None = 20
     temperature: float = 1.0
     executor: str = "process"

@@ -20,6 +20,18 @@ Changes from SeisForge:
   sigma adapts on its own; with ``"all"`` one accept/reject says nothing about
   which parameter was too far, so only a common factor adapts and the sigma
   ratios stay as given.
+- ``update="covariance"`` is adaptive Metropolis (Haario, Saksman & Tamminen
+  2001, Bernoulli 7(2):223-242) restricted to burn-in: until
+  ``covariance_start`` it runs the adaptive one-parameter scheme; from then on
+  it proposes all parameters at once from N(0, s^2 C), where C is the sample
+  covariance of the chain's own states since ``covariance_start // 2``
+  (updated every step) and s starts at the optimal 2.38 / sqrt(d) (Gelman,
+  Roberts & Gilks 1996) and is tuned towards ``target_acceptance`` (0.234).
+  At the end of burn-in C and s are frozen, so the stored samples again come
+  from a fixed random-walk Metropolis chain and no ergodicity condition for
+  adaptive MCMC is needed. Correlated parameters (a trade-off ridge) are then
+  crossed along the ridge instead of one axis at a time. Global jumps redraw
+  one parameter, as for ``"one"``.
 - The target returns (log prior, log likelihood) separately and a chain runs
   at ``temperature`` T, accepting with
   log alpha = d(log prior) + d(log likelihood) / T. T = 1 is the posterior;
@@ -36,6 +48,11 @@ from typing import Literal, Protocol
 import numpy as np
 
 ProgressCallback = Callable[[int, int, float, float], None]  # chain, step, acceptance, log post
+
+# Assumed: the covariance proposal adds (1e-4 * bound width)^2 to each variance, so
+# a parameter that never moved before covariance_start can still move. It is
+# negligible against any variance a sampled parameter reaches in practice.
+COVARIANCE_FLOOR = 1e-4
 
 
 class SplitTarget(Protocol):
@@ -61,11 +78,12 @@ class MetropolisConfig:
     bounds: tuple[Sequence[float], Sequence[float]]
     burn_in: int = 0
     thin: int = 1
-    update: Literal["one", "all"] = "one"
+    update: Literal["one", "all", "covariance"] = "one"
     global_jump_interval: int | None = None
     adapt: bool = False
-    target_acceptance: float | None = None  # default 0.44 for "one", 0.234 for "all"
+    target_acceptance: float | None = None  # default 0.44 for "one", else 0.234
     temperature: float = 1.0
+    covariance_start: int | None = None  # "covariance" only; default burn_in // 2
 
     def __post_init__(self):
         if self.n_steps <= 0:
@@ -74,14 +92,27 @@ class MetropolisConfig:
             raise ValueError("Need 0 <= burn_in < n_steps.")
         if self.thin <= 0:
             raise ValueError("thin must be positive.")
-        if self.update not in ("one", "all"):
-            raise ValueError("update must be 'one' or 'all'.")
+        if self.update not in ("one", "all", "covariance"):
+            raise ValueError("update must be 'one', 'all' or 'covariance'.")
         if self.global_jump_interval is not None and self.global_jump_interval <= 0:
             raise ValueError("global_jump_interval must be positive.")
         if self.temperature < 1:
             raise ValueError("temperature must be >= 1.")
         if self.adapt and self.burn_in == 0:
             raise ValueError("Adaptation runs during burn-in; set burn_in > 0.")
+        if self.update == "covariance":
+            if not self.adapt:
+                raise ValueError("update='covariance' learns its proposal; set adapt=True.")
+            if not 2 <= self.covariance_start_step < self.burn_in:
+                raise ValueError("Need 2 <= covariance_start < burn_in.")
+        elif self.covariance_start is not None:
+            raise ValueError("covariance_start applies to update='covariance' only.")
+
+    @property
+    def covariance_start_step(self) -> int:
+        if self.covariance_start is not None:
+            return self.covariance_start
+        return self.burn_in // 2
 
     @property
     def acceptance_goal(self) -> float:
@@ -98,11 +129,12 @@ class ChainResult:
     log_prior: np.ndarray
     log_likelihood: np.ndarray
     accepted: np.ndarray  # every step, burn-in included
-    proposal_sigma: np.ndarray  # final (adapted) sigmas
+    proposal_sigma: np.ndarray  # final (adapted) sigmas; sqrt(diag) for "covariance"
     initial_theta: np.ndarray
     seed: int | None
     chain_id: int
     temperature: float
+    proposal_covariance: np.ndarray | None = None  # frozen s^2 C (+ floor), "covariance" only
 
     @property
     def log_posterior(self) -> np.ndarray:
@@ -174,25 +206,40 @@ def run_chain(
     log_sigma = np.log(sigma)
     goal = config.acceptance_goal
 
+    covariance = config.update == "covariance"
+    if covariance:
+        dim = theta.size
+        start = config.covariance_start_step
+        floor = np.diag((COVARIANCE_FLOOR * (upper - lower)) ** 2)
+        log_scale = np.log(2.38 / np.sqrt(dim))
+        n_seen, mean, scatter = 0, np.zeros(dim), np.zeros((dim, dim))
+        cholesky = None
+
     for step in range(config.n_steps):
         global_jump = (
             config.global_jump_interval is not None
             and (step + 1) % config.global_jump_interval == 0
         )
+        joint = covariance and step >= start  # full-vector covariance proposal
+        if joint and (cholesky is None or step < config.burn_in):
+            cov = np.exp(2 * log_scale) * scatter / max(n_seen - 1, 1) + floor
+            cholesky = np.linalg.cholesky(cov)
         index = None
-        if global_jump and config.update == "one":
+        if global_jump and config.update != "all":
             # Redraw one parameter uniformly in its bounds, keep the others.
             jump = int(rng.integers(theta.size))
             proposal = theta.copy()
             proposal[jump] = rng.uniform(lower[jump], upper[jump])
         elif global_jump:
             proposal = rng.uniform(lower, upper)
-        elif config.update == "one":
+        elif joint:
+            proposal = theta + cholesky @ rng.standard_normal(theta.size)
+        elif config.update == "all":
+            proposal = theta + sigma * rng.standard_normal(theta.size)
+        else:
             index = int(rng.integers(theta.size))
             proposal = theta.copy()
             proposal[index] += sigma[index] * rng.standard_normal()
-        else:
-            proposal = theta + sigma * rng.standard_normal(theta.size)
 
         if np.all((proposal >= lower) & (proposal <= upper)):
             proposed = _safe(target, proposal)
@@ -204,14 +251,25 @@ def run_chain(
             accepted[step] = True
 
         if config.adapt and step < config.burn_in and not global_jump:
-            # Robbins-Monro: grow sigma after acceptances, shrink after rejections.
-            gain = (step + 1) ** -0.6
-            if index is None:
-                log_sigma += gain * (accepted[step] - goal)
+            # Robbins-Monro: grow the step after acceptances, shrink after rejections.
+            if joint:
+                gain = (step - start + 1) ** -0.6
+                log_scale += gain * (accepted[step] - goal)
             else:
-                log_sigma[index] += gain * (accepted[step] - goal)
-            sigma = np.minimum(np.exp(log_sigma), upper - lower)
-            log_sigma = np.log(sigma)
+                gain = (step + 1) ** -0.6
+                local_goal = 0.44 if covariance else goal
+                if index is None:
+                    log_sigma += gain * (accepted[step] - local_goal)
+                else:
+                    log_sigma[index] += gain * (accepted[step] - local_goal)
+                sigma = np.minimum(np.exp(log_sigma), upper - lower)
+                log_sigma = np.log(sigma)
+        if covariance and start // 2 <= step < config.burn_in:
+            # Welford update of the mean and scatter matrix of the visited states.
+            n_seen += 1
+            delta = theta - mean
+            mean += delta / n_seen
+            scatter += np.outer(delta, theta - mean)
 
         if step >= config.burn_in and (step - config.burn_in) % config.thin == 0:
             kept.append(theta.copy())
@@ -224,6 +282,10 @@ def run_chain(
         ):
             progress(chain_id, step + 1, float(accepted[: step + 1].mean()), sum(current))
 
+    proposal_covariance = None
+    if covariance:
+        proposal_covariance = cholesky @ cholesky.T
+        sigma = np.sqrt(np.diag(proposal_covariance))
     return ChainResult(
         samples=np.asarray(kept),
         log_prior=np.asarray(kept_prior),
@@ -234,6 +296,7 @@ def run_chain(
         seed=seed,
         chain_id=chain_id,
         temperature=temperature,
+        proposal_covariance=proposal_covariance,
     )
 
 

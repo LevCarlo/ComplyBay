@@ -4,7 +4,9 @@ Three files per run stage (``prior`` or ``posterior``):
 
 - ``<stage>_mcmc.nc``: theta (chain, draw, parameter), log_prior,
   log_likelihood, accepted (chain, step), acceptance rate, adapted proposal
-  sigma, initial theta, split R-hat and effective sample size per parameter.
+  sigma, initial theta, split R-hat and effective sample size per parameter;
+  with ``update="covariance"`` also the frozen proposal covariance
+  (chain, parameter, parameter_2).
 - ``<stage>_model.nc``: Vs, Vp, rho, Vp/Vs (sample, depth) for a subset of the
   samples, their quantiles (quantile, depth), and derived quantities per sample
   (interface depths, per-segment thickness, two-way times, mean Vs).
@@ -41,6 +43,12 @@ def _attrs(attrs: Mapping | None) -> dict:
 
 def mcmc_dataset(result, *, rhat, ess, attrs: Mapping | None = None) -> xr.Dataset:
     names = list(result.names)
+    extra = {}
+    if result.chains[0].proposal_covariance is not None:
+        extra["proposal_covariance"] = (
+            ("chain", "parameter", "parameter_2"),
+            np.stack([c.proposal_covariance for c in result.chains]),
+        )
     return xr.Dataset(
         data_vars={
             "theta": (("chain", "draw", "parameter"), result.samples),
@@ -61,11 +69,13 @@ def mcmc_dataset(result, *, rhat, ess, attrs: Mapping | None = None) -> xr.Datas
             ),
             "rhat": (("parameter",), np.asarray(rhat, dtype=float)),
             "ess": (("parameter",), np.asarray(ess, dtype=float)),
+            **extra,
         },
         coords={
             "chain": np.arange(result.samples.shape[0]),
             "draw": np.arange(result.samples.shape[1]),
             "parameter": names,
+            **({"parameter_2": names} if extra else {}),
             "step": np.arange(result.chains[0].accepted.size),
         },
         attrs=_attrs(
@@ -75,6 +85,11 @@ def mcmc_dataset(result, *, rhat, ess, attrs: Mapping | None = None) -> xr.Datas
                 "burn_in": result.config.burn_in,
                 "thin": result.config.thin,
                 "update": result.config.update,
+                "covariance_start": (
+                    result.config.covariance_start_step
+                    if result.config.update == "covariance"
+                    else None
+                ),
                 "temperature": result.config.temperature,
                 "global_jump_interval": result.config.global_jump_interval,
             }
