@@ -71,6 +71,22 @@ class PosteriorTarget:
             return -np.inf, -np.inf
         return result.log_prior, result.log_likelihood
 
+    @property
+    def detail_names(self) -> tuple[str, ...]:
+        """What :meth:`log_prior_likelihood_and_details` returns besides the totals."""
+        if self.prior_only:
+            return ()
+        obs = tuple(f"chi2.{o.name}" for o in self.likelihood.observations)
+        return obs + tuple(f"log_likelihood.{t}" for t in self.likelihood.terms)
+
+    def log_prior_likelihood_and_details(self, theta) -> tuple[float, float, np.ndarray]:
+        """As :meth:`log_prior_and_likelihood`, plus the per-group values of ``detail_names``."""
+        result = self.evaluate(theta)
+        if not np.isfinite(result.log_prior):
+            return -np.inf, -np.inf, np.full(len(self.detail_names), np.nan)
+        details = np.zeros(0) if self.prior_only else self.likelihood.details(result.likelihood)
+        return result.log_prior, result.log_likelihood, details
+
     def __call__(self, theta) -> float:
         """log posterior (log prior with ``prior_only``); what a sampler calls."""
         return self.evaluate(theta).log_posterior

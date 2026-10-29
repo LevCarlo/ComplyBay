@@ -28,6 +28,20 @@ option that restores the old behavior where one exists.
 
 ### Added
 
+- Per-group misfits in `posterior_mcmc.nc`: `group_chi2`, `group_n`,
+  `term_log_likelihood` per kept draw, and a trace every `thin` steps from
+  step 0 (`trace_log_posterior`, `trace_group_chi2`,
+  `trace_term_log_likelihood`). Targets may return per-group values with
+  `detail_names` / `log_prior_likelihood_and_details`; the sampler carries
+  them with each state (samples unchanged).
+- Several ACF ray-parameter groups: `Observations.acf` may be a list of named
+  groups, each with its own `ray_p`, window, processing, stacks and
+  `error_correlation`; data groups `acf_<name>_<component>`.
+- Setup checks (`complybay.workflow.checks`, logged in `run.log`, and
+  `InversionSetup.check()`): compliance above the infragravity limit, ACF
+  window beyond the data or including the normalizing lag, and the water
+  multiples in the window with their water-depth sensitivity. Forward
+  helpers `infragravity_cutoff` and `water_multiple_lags`.
 - Parallel tempering: `MetropolisConfig(temperatures=..., swap_interval=...)`,
   `geometric_temperatures`; in `model.yaml` `Sampler.tempering`. Each chain
   becomes a ladder of replicas with state swaps; only T = 1 is stored, with

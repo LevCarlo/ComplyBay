@@ -8,6 +8,7 @@ from complybay.forward.compliance import (
     compliance,
     compliance_kernel,
     halfspace_compliance,
+    infragravity_cutoff,
     water_wavenumber,
 )
 from complybay.model import LayeredModel, OBSModel, WaterLayer
@@ -27,6 +28,19 @@ def test_exact_wavenumber_solves_dispersion_relation(depth_m):
     omega = 2 * np.pi * np.geomspace(1e-4, 0.5, 200)
     k = water_wavenumber(omega, depth_m)
     np.testing.assert_allclose(G_DEFAULT * k * np.tanh(k * depth_m), omega**2, rtol=1e-12)
+
+
+def test_infragravity_cutoff_is_where_the_wavelength_equals_the_depth():
+    for depth in (500.0, 2000.0, 5000.0):
+        f_c = infragravity_cutoff(depth)
+        # Independent: the exact wavenumber solver at f_c gives k H = 2 pi.
+        k = water_wavenumber(2 * np.pi * f_c, depth)[0]
+        assert k * depth == pytest.approx(2 * np.pi, rel=1e-10)
+        # Deep-water form, as usually quoted (tanh(2 pi) = 1 - 7e-6).
+        assert f_c == pytest.approx(np.sqrt(G_DEFAULT / (2 * np.pi * depth)), rel=1e-5)
+    assert infragravity_cutoff(2000.0) == pytest.approx(0.0279, abs=1e-4)
+    with pytest.raises(ValueError):
+        infragravity_cutoff(0.0)
 
 
 def test_wavenumber_limits():

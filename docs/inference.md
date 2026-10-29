@@ -195,6 +195,18 @@ that differ in both parameters at once. Plain AM with global jumps never
 leaves the starting mode; with 7 temperatures up to 300 the stored samples
 give the weight 0.7 within 0.06 and the within-mode spread within 10 %.
 
+### Per-group values
+
+A target with `detail_names` and `log_prior_likelihood_and_details(theta)`
+(`PosteriorTarget`: chi2 per observation and log L per likelihood term)
+hands the sampler extra values that travel with each state, through
+acceptances and tempering swaps; they are stored for the kept draws
+(`ChainResult.details`) and every `thin` steps from step 0
+(`trace_steps`, `trace_log_posterior`, `trace_details`). They cost nothing:
+they come from the evaluation the sampler makes anyway. Use them to see each
+data group's fit; the total log likelihood follows mostly the group whose
+misfit changes most.
+
 ### Lagging chains
 
 `lagging_chains(log_posterior)` flags chains whose log posterior lies wholly

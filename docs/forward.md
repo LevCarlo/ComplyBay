@@ -37,6 +37,9 @@ enters only through its depth.
   models, and the neglected structure has no measurable effect.
 - `compliance_kernel` gives d ln(eta) / d ln(m) per layer by central
   differences.
+- `infragravity_cutoff(depth_m)`: the frequency where the wavelength equals
+  the water depth, the usual upper limit of compliance data (checked: k H =
+  2 pi from the exact wavenumber solver).
 
 Checked against: the v0.1 outputs (`tests/data/legacy_v0_1_forward.npz`), and
 the static half-space solution `(lambda + 2 mu) / (2 mu (lambda + mu))`, which
@@ -125,6 +128,9 @@ Performance and accuracy controls:
   ringing after 100 s. `wraparound_fraction` returns the energy fraction of the
   filtered response in the last 10 % of the window; check it before using a
   shorter window.
+- `water_multiple_lags(water, ray_p, n)`: lags m 2 H sqrt(1/vp_w^2 - p^2) of
+  the water reverberations, the strongest ACF arrivals (checked against the
+  strongest peak of a synthetic ACF over a half-space).
 - Cost for a 32-layer model, 2 km water, dt = 0.05 s, 200 s: about 4 ms for
   Z + P with `kim2023` and 8 ms with `tauzin2019` (the response is computed in
   numpy with the frequency axis folded into one matrix product per layer).

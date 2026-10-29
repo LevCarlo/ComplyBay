@@ -9,9 +9,15 @@ from complybay.forward.acf import (
     add_noise_level,
     synthetic_acf,
     synthetic_acfs,
+    water_multiple_lags,
     wraparound_fraction,
 )
-from complybay.forward.compliance import compliance, compliance_kernel, water_wavenumber
+from complybay.forward.compliance import (
+    compliance,
+    compliance_kernel,
+    infragravity_cutoff,
+    water_wavenumber,
+)
 from complybay.forward.dispersion import phase_velocity, phase_velocity_kernel
 from complybay.forward.response import SeafloorResponse, seafloor_response
 
@@ -20,11 +26,13 @@ __all__ = [
     "add_noise_level",
     "compliance",
     "compliance_kernel",
+    "infragravity_cutoff",
     "phase_velocity",
     "phase_velocity_kernel",
     "seafloor_response",
     "synthetic_acf",
     "synthetic_acfs",
+    "water_multiple_lags",
     "water_wavenumber",
     "wraparound_fraction",
 ]

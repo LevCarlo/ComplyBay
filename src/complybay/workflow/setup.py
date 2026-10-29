@@ -30,6 +30,7 @@ from complybay.parameterization import (
     parameterization_from_config,
     sample_prior,
 )
+from complybay.workflow.checks import Note, check_observations
 from complybay.workflow.config import (
     MODEL_SECTIONS,
     ObservationSet,
@@ -93,6 +94,12 @@ class InversionSetup:
             temperatures=temperatures,
             swap_interval=swap_interval,
         )
+
+    def check(self) -> list[Note]:
+        """Notes on the observations (:mod:`complybay.workflow.checks`); none without data."""
+        if self.observations is None:
+            return []
+        return check_observations(self.observations.observations, self.water)
 
     def initial_thetas(self) -> np.ndarray:
         s = self.sampler

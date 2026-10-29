@@ -222,6 +222,28 @@ class JointLikelihood:
     def noise_parameters(self) -> tuple[str, ...]:
         return tuple(o.noise_parameter for o in self.observations if o.noise_parameter)
 
+    @property
+    def terms(self) -> tuple[str, ...]:
+        """Names of the additive log-likelihood terms: independent groups, then blocks."""
+        in_block = {m for c in self.correlations for m in c.members}
+        independent = tuple(o.name for o in self.observations if o.name not in in_block)
+        return independent + tuple(c.name for c in self.correlations)
+
+    @property
+    def sizes(self) -> dict[str, int]:
+        """Number of fitted samples per observation (N of chi2 / N)."""
+        return {o.name: int(np.count_nonzero(_fitted(o))) for o in self.observations}
+
+    def details(self, evaluation: LikelihoodEvaluation) -> np.ndarray:
+        """chi2 per observation (stated sigma, h = 1), then log L per term; NaN on failure."""
+        n_obs, n_terms = len(self.observations), len(self.terms)
+        if not evaluation.success:
+            return np.full(n_obs + n_terms, np.nan)
+        chi2 = [g.chi2 for g in evaluation.groups]
+        by_name = {g.name: g.log_likelihood for g in evaluation.groups}
+        by_name.update({b.name: b.log_likelihood for b in evaluation.blocks})
+        return np.array(chi2 + [by_name[t] for t in self.terms], dtype=float)
+
     def evaluate(
         self, model: OBSModel, parameters: Mapping[str, float] | None = None
     ) -> LikelihoodEvaluation:

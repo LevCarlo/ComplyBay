@@ -7,6 +7,7 @@ import xarray as xr
 
 from complybay.acf import Highpass, Whitening, preset
 from complybay.cli import main
+from complybay.forward import synthetic_acfs
 from complybay.inference.diagnostics import effective_sample_size, split_rhat
 from complybay.inference.ensemble import derived_quantities
 from complybay.io import dump_yaml, load_yaml, read_three_columns, write_three_columns
@@ -117,6 +118,96 @@ def test_acf_error_correlation_forms():
         build_inversion(model, bad, obs_dir=EXAMPLE)
 
 
+def _acf_groups_obs(tmp_path, ray_ps, **group):
+    """obs.yaml with one ACF group per ray parameter, data = synthetics of theta0."""
+    setup = build_inversion(
+        load_yaml(EXAMPLE / "model.yaml"), load_yaml(EXAMPLE / "obs.yaml"), obs_dir=EXAMPLE
+    )
+    model = setup.prior.evaluate(setup.parameterization.theta0()).obs_model
+    template = next(o for o in setup.observations.observations if o.name == "acf_vertical")
+    obs = load_yaml(EXAMPLE / "obs.yaml")
+    del obs["Observations"]["compliance"], obs["Observations"]["dispersion"]
+    groups = []
+    for i, ray_p in enumerate(ray_ps):
+        lags, acfs = synthetic_acfs(model, ray_p, template.processing, dt=template.dt)
+        components = {}
+        for component, values in acfs.items():
+            path = tmp_path / f"acf_{i}_{component}.dat"
+            write_three_columns(path, lags, values, np.full(lags.size, 0.01), header="synthetic")
+            components[component] = {"file": str(path), "noise": True}
+        groups.append(
+            {"name": f"p{i}", "processing": "kim2023", "ray_p": ray_p, "window": [0.3, 8.0]}
+            | {"components": components}
+            | group
+        )
+    obs["Observations"]["acf"] = groups
+    return setup, obs
+
+
+def test_acf_groups_by_ray_parameter(tmp_path):
+    setup, obs = _acf_groups_obs(tmp_path, [0.05, 0.075], error_correlation="processing")
+    model_cfg = load_yaml(EXAMPLE / "model.yaml")
+    grouped = build_inversion(model_cfg, obs)
+    names = [o.name for o in grouped.observations.observations]
+    assert names == ["acf_p0_vertical", "acf_p0_pressure", "acf_p1_vertical", "acf_p1_pressure"]
+    assert {f"noise.{n}" for n in names} <= set(grouped.names)
+    assert [c.members for c in grouped.observations.correlations] == [(n,) for n in names]
+    # Each group is predicted at its own ray parameter: theta0 fits its own data exactly.
+    theta = np.r_[setup.parameterization.theta0(), np.zeros(len(grouped.names) - 4)]
+    theta = np.array(
+        [theta[setup.names.index(n)] if n in setup.names else 0.0 for n in grouped.names]
+    )
+    fits = grouped.target.evaluate(theta).likelihood
+    assert max(b.chi2 for b in fits.blocks) < 1e-12
+    swapped = copy.deepcopy(obs)
+    swapped["Observations"]["acf"][0]["ray_p"] = 0.075
+    fits = build_inversion(model_cfg, swapped).target.evaluate(theta).likelihood
+    assert fits.blocks[0].chi2 > 1.0 and fits.blocks[2].chi2 < 1e-12
+
+
+def test_acf_group_list_errors(tmp_path):
+    _, obs = _acf_groups_obs(tmp_path, [0.05, 0.075])
+    model_cfg = load_yaml(EXAMPLE / "model.yaml")
+    for edit, match in [
+        (lambda g: g[1].update(name="p0"), "distinct"),
+        (lambda g: g[0].pop("name"), "needs a name"),
+        (lambda g: g[0].update(name="p 0"), "needs a name"),
+        (lambda g: g[1].pop("ray_p"), r"acf\[p1\] needs ray_p"),
+        (lambda g: g[1].update(raypar=0.1), r"acf\[p1\]: unknown keys"),
+        (lambda g: g.clear(), "non-empty list"),
+    ]:
+        bad = copy.deepcopy(obs)
+        edit(bad["Observations"]["acf"])
+        with pytest.raises(ValueError, match=match):
+            build_inversion(model_cfg, bad)
+
+
+def test_setup_checks_flag_unusable_data(tmp_path):
+    model_cfg = load_yaml(EXAMPLE / "model.yaml")
+    obs = load_yaml(EXAMPLE / "obs.yaml")
+    data = read_three_columns(EXAMPLE / "compliance.dat")
+    freqs = np.r_[data.x, 0.03, 0.04]  # the limit for 2 km of water is 0.0279 Hz
+    value, sigma = np.r_[data.value, data.value[-2:]], np.r_[data.sigma, data.sigma[-2:]]
+    write_three_columns(tmp_path / "c.dat", freqs, value, sigma, header="compliance")
+    obs["Observations"]["compliance"]["file"] = str(tmp_path / "c.dat")
+    obs["Observations"]["dispersion"]["file"] = str(EXAMPLE / "vph.dat")
+    for component in obs["Observations"]["acf"]["components"].values():
+        component["file"] = str(EXAMPLE / component["file"])
+    obs["Observations"]["acf"]["window"] = [0.0, 40.0]
+    obs["Observations"]["acf"]["processing"] = {"preset": "kim2023", "normalize": "zero_lag"}
+    notes = build_inversion(model_cfg, obs).check()
+    warnings = [n.message for n in notes if n.level == "warning" and n.group == "compliance"]
+    assert len(warnings) == 1 and warnings[0].startswith("2 of 17 frequencies above")
+    acf = [n.message for n in notes if n.group == "acf_vertical"]
+    assert any("beyond the data's last lag" in m for m in acf)
+    assert any("normalizing zero lag" in m for m in acf)
+    info = next(m for m in acf if m.startswith("water multiples"))
+    assert "2.66, 5.31" in info  # 2 H sqrt(1/1.5^2 - 0.06^2) = 2.664 s per multiple
+    obs["Observations"]["acf"]["window"] = [0.3, 2.0]
+    notes = build_inversion(model_cfg, obs).check()
+    assert any(m.message.startswith("no water multiple") for m in notes)
+
+
 def test_processing_config_forms():
     assert processing_from_config("kim2023", max_lag=12.0).max_lag == 12.0
     custom = processing_from_config(
@@ -206,6 +297,24 @@ def test_run_writes_the_documented_outputs(tmp_path):
     mcmc = xr.open_dataset(out / "posterior_mcmc.nc", engine="h5netcdf")
     assert mcmc.sizes["chain"] == 2 and mcmc.sizes["draw"] == 40 and mcmc.sizes["parameter"] == 8
     assert {"rhat", "ess", "log_prior", "log_likelihood"} <= set(mcmc.data_vars)
+    # Per-group misfits: the stored chi2 of a draw is that of its parameters.
+    assert list(mcmc["group"].values) == [
+        "compliance",
+        "dispersion",
+        "acf_vertical",
+        "acf_pressure",
+    ]
+    assert list(mcmc["term"].values) == list(mcmc["group"].values)
+    assert int(mcmc["trace_step"][0]) == 0 and mcmc.sizes["trace_step"] == 60
+    setup = build_inversion(
+        load_yaml(tmp_path / "model.yaml"), load_yaml(EXAMPLE / "obs.yaml"), obs_dir=EXAMPLE
+    )
+    fit = setup.target.evaluate(mcmc["theta"].values[1, 7]).likelihood
+    np.testing.assert_allclose(mcmc["group_chi2"].values[1, 7], [g.chi2 for g in fit.groups])
+    np.testing.assert_allclose(
+        mcmc["term_log_likelihood"].values[1, 7].sum(), mcmc["log_likelihood"].values[1, 7]
+    )
+    assert int(mcmc["group_n"].sel(group="acf_vertical")) == 155
     assert mcmc.attrs["station"] == "SYN01" and mcmc.attrs["stage"] == "posterior"
     model = xr.open_dataset(out / "posterior_model.nc", engine="h5netcdf")
     assert model["vs"].shape == (20, 51) and "tp2.sediment" in model
@@ -213,6 +322,7 @@ def test_run_writes_the_documented_outputs(tmp_path):
     assert predictive["acf_vertical_predicted"].shape == (5, 601)
     assert "acf_vertical_best_chi2" in predictive.attrs
     assert load_yaml(out / "resolved_obs.yaml")["Run"]["station"] == "SYN01"
+    assert "check acf_vertical: water multiples inside the window" in (out / "run.log").read_text()
     assert result.files["posterior_predictive"].exists()
 
 

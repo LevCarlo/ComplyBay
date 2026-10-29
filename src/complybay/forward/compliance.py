@@ -78,6 +78,22 @@ def water_wavenumber(
     return k
 
 
+def infragravity_cutoff(depth_m: float, *, g: float = G_DEFAULT) -> float:
+    """Frequency (Hz) at which the gravity-wave wavelength equals the water depth.
+
+    With k = 2 pi / H in omega^2 = g k tanh(k H):
+    f_c = sqrt(g tanh(2 pi) / (2 pi H)), within 1e-5 of the deep-water
+    sqrt(g / (2 pi H)). Linear wave theory attenuates the wave pressure from
+    the sea surface to the seafloor by 1 / cosh(k H), which is 1/268 at f_c and
+    falls off exponentially above it, so compliance measured above f_c is
+    dominated by noise; f_c is the usual upper frequency limit of compliance
+    data (0.028 Hz in 2 km of water).
+    """
+    if depth_m <= 0:
+        raise ValueError("Water depth must be positive.")
+    return float(np.sqrt(g * np.tanh(2 * np.pi) / (2 * np.pi * depth_m)))
+
+
 def _raydep_array(model: OBSModel) -> np.ndarray:
     """Rows (thickness m, rho, vp, vs) as raydep_ft expects; half-space thickness unused."""
     solid = model.solid

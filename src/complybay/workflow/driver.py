@@ -135,7 +135,13 @@ def _write_stage(stage, setup, result, out, attrs, logger, files):
 
     files[f"{stage}_mcmc"] = out / f"{stage}_mcmc.nc"
     write_netcdf(
-        mcmc_dataset(result, rhat=rhat, ess=ess, attrs=attrs | {"stage": stage}),
+        mcmc_dataset(
+            result,
+            rhat=rhat,
+            ess=ess,
+            attrs=attrs | {"stage": stage},
+            group_sizes=None if stage == "prior" else setup.target.likelihood.sizes,
+        ),
         files[f"{stage}_mcmc"],
     )
 
@@ -257,6 +263,9 @@ def run_inversion(
         s.executor,
         s.seed,
     )
+    for note in setup.check():
+        log = logger.warning if note.level == "warning" else logger.info
+        log("check %s: %s", note.group, note.message)
     callback = None
     if progress and s.executor != "process":
 

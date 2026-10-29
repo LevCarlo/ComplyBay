@@ -24,7 +24,7 @@ from scipy.fft import irfft, next_fast_len, rfftfreq
 
 from complybay.acf.processing import ACFProcessing, acf_from_spectrum
 from complybay.forward.response import seafloor_response
-from complybay.model import OBSModel
+from complybay.model import OBSModel, WaterLayer
 
 Component = Literal["vertical", "pressure", "radial"]
 DEFAULT_DT = 0.05  # s
@@ -115,6 +115,20 @@ def synthetic_acf(
         model, ray_p, processing, (component,), dt=dt, duration=duration, snr=snr
     )
     return lags, acfs[component]
+
+
+def water_multiple_lags(water: WaterLayer, ray_p: float, n: int = 3) -> np.ndarray:
+    """Lags (s) of the first ``n`` water-column reverberations, m * 2 H q_w.
+
+    q_w = sqrt(1 / vp_w^2 - ray_p^2) is the vertical slowness in the water
+    (H in km, vp_w in km/s, ray_p in s/km). These are the strongest arrivals
+    of a seafloor ACF; their lags scale with the water depth, so a depth error
+    dH shifts the m-th one by 2 m q_w dH.
+    """
+    q = 1 / water.vp**2 - ray_p**2
+    if ray_p < 0 or q <= 0:
+        raise ValueError("ray_p must be non-negative and below 1 / water velocity.")
+    return np.arange(1, n + 1) * 2 * water.thickness * np.sqrt(q)
 
 
 def wraparound_fraction(

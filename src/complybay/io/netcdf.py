@@ -47,9 +47,40 @@ def _attrs(attrs: Mapping | None) -> dict:
     return out
 
 
-def mcmc_dataset(result, *, rhat, ess, attrs: Mapping | None = None) -> xr.Dataset:
+def _misfits(result, group_sizes):
+    """Per-group chi2 and per-term log L of the kept draws and of the trace."""
+    names = list(result.detail_names)
+    groups = [n.removeprefix("chi2.") for n in names if n.startswith("chi2.")]
+    terms = [n.removeprefix("log_likelihood.") for n in names if n.startswith("log_likelihood.")]
+    if len(groups) + len(terms) != len(names):
+        raise ValueError(f"Unknown detail names: {names}")
+    kept = np.stack([c.details for c in result.chains])
+    trace = np.stack([c.trace_details for c in result.chains])
+    g = len(groups)
+    data = {
+        "group_chi2": (("chain", "draw", "group"), kept[..., :g]),
+        "term_log_likelihood": (("chain", "draw", "term"), kept[..., g:]),
+        "trace_group_chi2": (("chain", "trace_step", "group"), trace[..., :g]),
+        "trace_term_log_likelihood": (("chain", "trace_step", "term"), trace[..., g:]),
+    }
+    if group_sizes is not None:
+        data["group_n"] = (("group",), np.array([group_sizes[n] for n in groups]))
+    return data, {"group": groups, "term": terms}
+
+
+def mcmc_dataset(
+    result, *, rhat, ess, attrs: Mapping | None = None, group_sizes: Mapping | None = None
+) -> xr.Dataset:
+    """MCMC samples and diagnostics; ``group_sizes`` (N per data group) adds ``group_n``."""
     names = list(result.names)
-    extra = {}
+    extra, extra_coords = {}, {}
+    extra["trace_log_posterior"] = (
+        ("chain", "trace_step"),
+        np.stack([c.trace_log_posterior for c in result.chains]),
+    )
+    if result.detail_names:
+        misfits, extra_coords = _misfits(result, group_sizes)
+        extra.update(misfits)
     if result.chains[0].proposal_covariance is not None:
         extra["proposal_covariance"] = (
             ("chain", "parameter", "parameter_2"),
@@ -90,6 +121,8 @@ def mcmc_dataset(result, *, rhat, ess, attrs: Mapping | None = None) -> xr.Datas
             **({"parameter_2": names} if "proposal_covariance" in extra else {}),
             **({"temperature_pair": np.arange(len(ladder) - 1)} if len(ladder) > 1 else {}),
             "step": np.arange(result.chains[0].accepted.size),
+            "trace_step": result.chains[0].trace_steps,
+            **extra_coords,
         },
         attrs=_attrs(
             {

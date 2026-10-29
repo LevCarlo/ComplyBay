@@ -16,7 +16,12 @@ from complybay.acf import (
     preset,
     stack_acfs,
 )
-from complybay.forward.acf import synthetic_acf, synthetic_acfs, wraparound_fraction
+from complybay.forward.acf import (
+    synthetic_acf,
+    synthetic_acfs,
+    water_multiple_lags,
+    wraparound_fraction,
+)
 from complybay.forward.response import seafloor_response
 from complybay.model import LayeredModel, OBSModel, WaterLayer
 
@@ -110,6 +115,7 @@ def test_water_reverberation_has_opposite_sign_on_pressure():
     hw, p = 3.0, 0.06
     model = OBSModel(LayeredModel([], [6.0], [3.5], [2.7]), WaterLayer(hw))
     expected = 2 * hw * _qa(1.5, p)
+    np.testing.assert_allclose(water_multiple_lags(model.water, p, 2), [expected, 2 * expected])
     signs = {}
     for component in ("vertical", "pressure"):
         lags, acf = synthetic_acf(model, p, PROCESSING, component=component)
@@ -117,6 +123,11 @@ def test_water_reverberation_has_opposite_sign_on_pressure():
         assert lag == pytest.approx(expected, abs=0.05)
         signs[component] = np.sign(value)
     assert signs["vertical"] == -signs["pressure"]
+
+
+def test_water_multiple_lags_validation():
+    with pytest.raises(ValueError, match="below 1 / water velocity"):
+        water_multiple_lags(WaterLayer(2.0), 0.7)
 
 
 def test_pressure_acf_needs_water():

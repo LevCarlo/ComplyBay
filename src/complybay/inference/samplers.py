@@ -179,6 +179,10 @@ class ChainResult:
     temperature: float
     proposal_covariance: np.ndarray | None = None  # frozen s^2 C (+ floor), "covariance" only
     swap_acceptance: np.ndarray | None = None  # per adjacent pair of the ladder, all steps
+    details: np.ndarray | None = None  # (n_kept, n_details): the target's detail_names
+    trace_steps: np.ndarray | None = None  # every thin-th step from 0, burn-in included
+    trace_log_posterior: np.ndarray | None = None
+    trace_details: np.ndarray | None = None  # (n_trace, n_details)
 
     @property
     def log_posterior(self) -> np.ndarray:
@@ -196,6 +200,7 @@ class MCMCResult:
     chains: tuple[ChainResult, ...]
     config: MetropolisConfig
     names: tuple[str, ...] = ()
+    detail_names: tuple[str, ...] = ()
 
     @property
     def log_posterior(self) -> np.ndarray:
@@ -210,14 +215,26 @@ class MCMCResult:
         return self.samples.reshape(-1, self.samples.shape[-1])
 
 
-def _safe(target: SplitTarget, theta: np.ndarray) -> tuple[float, float]:
+def _n_details(target) -> int:
+    return len(getattr(target, "detail_names", ()))
+
+
+def _safe(target: SplitTarget, theta: np.ndarray) -> tuple[float, float, np.ndarray]:
+    """(log prior, log likelihood, details); details are the target's optional
+    per-group values (``detail_names`` and ``log_prior_likelihood_and_details``)."""
+    n = _n_details(target)
+    failed = (-np.inf, -np.inf, np.full(n, np.nan))
     try:
-        log_prior, log_likelihood = target.log_prior_and_likelihood(theta)
+        if n:
+            log_prior, log_likelihood, details = target.log_prior_likelihood_and_details(theta)
+        else:
+            log_prior, log_likelihood = target.log_prior_and_likelihood(theta)
+            details = np.zeros(0)
     except (FloatingPointError, OverflowError, ValueError):
-        return -np.inf, -np.inf
+        return failed
     if not np.isfinite(log_prior) or np.isnan(log_likelihood):
-        return -np.inf, -np.inf
-    return float(log_prior), float(log_likelihood)
+        return failed
+    return float(log_prior), float(log_likelihood), np.asarray(details, dtype=float)
 
 
 class _Replica:
@@ -270,7 +287,7 @@ class _Replica:
         if np.all((proposal >= lower) & (proposal <= upper)):
             proposed = _safe(self.target, proposal)
         else:
-            proposed = (-np.inf, -np.inf)
+            proposed = (-np.inf, -np.inf, None)
         current = self.current
         log_alpha = (proposed[0] - current[0]) + (proposed[1] - current[1]) / self.temperature
         if np.isfinite(log_alpha) and (log_alpha >= 0 or np.log(rng.random()) < log_alpha):
@@ -342,7 +359,8 @@ def run_chain(
     cold = replicas[0]
     n_pairs = len(replicas) - 1
     attempts, accepts = np.zeros(n_pairs, dtype=int), np.zeros(n_pairs, dtype=int)
-    kept, kept_prior, kept_like = [], [], []
+    kept, kept_prior, kept_like, kept_details = [], [], [], []
+    trace_steps, trace_lp, trace_details = [], [], []
 
     for step in range(config.n_steps):
         for replica in replicas:
@@ -354,12 +372,22 @@ def run_chain(
             kept.append(cold.theta.copy())
             kept_prior.append(cold.current[0])
             kept_like.append(cold.current[1])
+            kept_details.append(cold.current[2])
+        if step % config.thin == 0:
+            trace_steps.append(step)
+            trace_lp.append(cold.current[0] + cold.current[1])
+            trace_details.append(cold.current[2])
         if (
             progress is not None
             and progress_every
             and ((step + 1) % progress_every == 0 or step + 1 == config.n_steps)
         ):
-            progress(chain_id, step + 1, float(cold.accepted[: step + 1].mean()), sum(cold.current))
+            progress(
+                chain_id,
+                step + 1,
+                float(cold.accepted[: step + 1].mean()),
+                cold.current[0] + cold.current[1],
+            )
 
     proposal_covariance, sigma = None, cold.sigma
     if cold.covariance:
@@ -378,6 +406,10 @@ def run_chain(
         temperature=config.ladder[0],
         proposal_covariance=proposal_covariance,
         swap_acceptance=swap_acceptance,
+        details=np.asarray(kept_details),
+        trace_steps=np.asarray(trace_steps),
+        trace_log_posterior=np.asarray(trace_lp),
+        trace_details=np.asarray(trace_details),
     )
 
 
@@ -445,4 +477,5 @@ def run_metropolis(
         chains=chains,
         config=config,
         names=tuple(names),
+        detail_names=tuple(getattr(target, "detail_names", ())),
     )

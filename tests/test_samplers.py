@@ -286,3 +286,39 @@ def test_lagging_chains_flags_a_chain_stuck_in_a_lower_mode():
     lp[2] -= 380  # the CZP case of docs/synthetic_tests.md
     lp[3] -= 3  # shifted, but overlapping: not flagged
     assert lagging_chains(lp) == (2,)
+
+
+@dataclass(frozen=True)
+class GaussianWithDetails:
+    """Flat prior, unit Gaussian likelihood, and the per-parameter chi2 as details."""
+
+    detail_names = ("chi2.a", "chi2.b")
+
+    def log_prior_and_likelihood(self, theta):
+        return 0.0, float(-0.5 * np.sum(theta**2))
+
+    def log_prior_likelihood_and_details(self, theta):
+        return 0.0, float(-0.5 * np.sum(theta**2)), theta**2
+
+
+@pytest.mark.parametrize("ladder", [None, (1.0, 3.0, 9.0)])
+def test_details_follow_the_stored_states(ladder):
+    # The details travel with each state, through accepts and swaps alike.
+    box = (np.full(2, -10.0), np.full(2, 10.0))
+    config = MetropolisConfig(3000, 0.5, box, burn_in=500, thin=7, temperatures=ladder)
+    result = run_metropolis(GaussianWithDetails(), np.ones((2, 2)), config, seed=13)
+    assert result.detail_names == ("chi2.a", "chi2.b")
+    for chain in result.chains:
+        np.testing.assert_array_equal(chain.details, chain.samples**2)
+        np.testing.assert_allclose(
+            chain.trace_log_posterior, -0.5 * chain.trace_details.sum(axis=1)
+        )
+        assert chain.trace_steps[0] == 0 and np.all(np.diff(chain.trace_steps) == 7)
+        # The trace and the kept draws record the same states where their steps meet.
+        common = np.nonzero(np.isin(chain.trace_steps, 500 + 7 * np.arange(len(chain.samples))))[0]
+        kept = (chain.trace_steps[common] - 500) // 7
+        np.testing.assert_array_equal(chain.trace_details[common], chain.details[kept])
+    plain = run_chain(
+        GaussianLikelihood(), [0.0], MetropolisConfig(50, 1.0, (np.full(1, -5.0), np.full(1, 5.0)))
+    )
+    assert plain.details.shape == (50, 0)

@@ -15,7 +15,7 @@
     Observations:
       compliance: {file: compliance.dat, noise: {bounds: [-0.5, 0.5]}}
       dispersion: {file: vph.dat, wave: rayleigh, mode: 0, noise: {...}}
-      acf:
+      acf:                           # one group; or a list of named groups, see below
         processing: kim2023          # preset name, {preset: ..., <overrides>}, or full settings
         ray_p: 0.06                  # s/km, mean of the stacked events
         window: [0.3, 8.0]           # s, lags that enter the likelihood
@@ -43,11 +43,18 @@ noise, per component, with the observed ACF as the expected one), or
 ``{file: acf_errors.nc}`` (written by :func:`complybay.io.write_acf_errors`
 from the event ACFs; one joint block for all components, so Z-P correlation
 is kept). Either mapping form takes ``variance_fraction`` (default 0.99).
+
+``Observations.acf`` may be a list of groups, each a mapping as above plus a
+``name`` (letters, digits, _): events binned by ray parameter, each bin with
+its own ``ray_p``, stacks, window and ``error_correlation`` file. Their data
+groups are ``acf_<name>_<component>``, each with its own noise scale; errors of
+different groups are independent (different events).
 """
 
 from __future__ import annotations
 
 import dataclasses
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -78,6 +85,7 @@ from complybay.io import read_acf_errors, read_three_columns
 from complybay.model import WaterLayer
 from complybay.parameterization import DiscretizationConfig
 
+ACF_GROUP_NAME = re.compile(r"[A-Za-z0-9_]+")
 MODEL_SECTIONS = {"Model", "Inversion", "Constraints", "Discretization", "Sampler", "Output"}
 OBS_SECTIONS = {"Station", "Observations", "Forward"}
 NOISE_DEFAULTS = {"bounds": [-0.5, 0.5], "initial": 0.0, "proposal_sigma": 0.05}
@@ -310,55 +318,75 @@ def observations_from_config(obs_cfg: Mapping, base_dir: str | Path) -> Observat
         )
         files["dispersion"] = str(data.path)
 
+    correlations = []
     if "acf" in groups:
-        item = dict(groups["acf"])
-        check_keys(
-            item,
-            {"processing", "ray_p", "window", "snr", "components", "error_correlation"},
-            "Observations.acf",
-        )
         settings = dict(forward.get("acf") or {})
         check_keys(settings, {"duration"}, "Forward.acf")
-        components = dict(item.get("components") or {})
-        if not components:
-            raise ValueError("Observations.acf needs at least one component.")
-        for component, comp_cfg in components.items():
-            comp_cfg = dict(comp_cfg)
-            check_keys(comp_cfg, {"file", "noise"}, f"Observations.acf.components.{component}")
-            data = read_three_columns(path(comp_cfg))
-            dt = float(np.mean(np.diff(data.x)))
-            if data.x[0] != 0 or not np.allclose(np.diff(data.x), dt, rtol=1e-6, atol=1e-9):
-                raise ValueError(f"{data.path}: ACF lags must start at 0 with a constant step.")
-            processing = processing_from_config(
-                item.get("processing", "kim2023"), max_lag=data.x[-1]
-            )
-            group = f"acf_{component}"
-            observations.append(
-                ACFObservation(
-                    component=component,
-                    ray_p=float(item["ray_p"]),
-                    processing=processing,
-                    values=data.value,
-                    sigma=data.sigma,
-                    window=tuple(float(v) for v in item["window"]),
-                    name=group,
-                    noise_parameter=_noise(group, comp_cfg.get("noise"), parameters),
-                    dt=dt,
-                    snr=None if item.get("snr") is None else float(item["snr"]),
-                    **({"duration": float(settings["duration"])} if "duration" in settings else {}),
+        acf_groups = groups["acf"]
+        if isinstance(acf_groups, Mapping):
+            acf_groups = [(None, acf_groups)]
+        elif isinstance(acf_groups, list) and acf_groups:
+            labels = [g.get("name") if isinstance(g, Mapping) else None for g in acf_groups]
+            if any(not isinstance(n, str) or not ACF_GROUP_NAME.fullmatch(n) for n in labels):
+                raise ValueError(
+                    "Observations.acf: every group of a list needs a name of letters, digits, _."
                 )
-            )
-            files[group] = str(data.path)
-        acfs = [o for o in observations if isinstance(o, ACFObservation)]
-        correlations, source = _acf_correlations(item.get("error_correlation"), acfs, path)
-        if source is not None:
-            files["acf_errors"] = source
-    else:
-        correlations = []
+            if len(set(labels)) != len(labels):
+                raise ValueError(f"Observations.acf: group names must be distinct: {labels}")
+            acf_groups = list(zip(labels, acf_groups, strict=True))
+        else:
+            raise ValueError("Observations.acf must be a mapping or a non-empty list of groups.")
+        for label, item in acf_groups:
+            acfs, blocks = _acf_group(label, dict(item), settings, path, parameters, files)
+            observations.extend(acfs)
+            correlations.extend(blocks)
 
     if not observations:
         raise ValueError("obs.yaml defines no observations.")
     return ObservationSet(tuple(observations), tuple(parameters), files, tuple(correlations))
+
+
+def _acf_group(label, item, settings, path, parameters, files):
+    """ACF observations and error-correlation blocks of one group (one ray_p)."""
+    where = "Observations.acf" if label is None else f"Observations.acf[{label}]"
+    keys = {"processing", "ray_p", "window", "snr", "components", "error_correlation"}
+    check_keys(item, keys | ({"name"} if label is not None else set()), where)
+    for key in ("ray_p", "window"):
+        if key not in item:
+            raise ValueError(f"{where} needs {key}.")
+    components = dict(item.get("components") or {})
+    if not components:
+        raise ValueError(f"{where} needs at least one component.")
+    acfs = []
+    for component, comp_cfg in components.items():
+        comp_cfg = dict(comp_cfg)
+        check_keys(comp_cfg, {"file", "noise"}, f"{where}.components.{component}")
+        data = read_three_columns(path(comp_cfg))
+        dt = float(np.mean(np.diff(data.x)))
+        if data.x[0] != 0 or not np.allclose(np.diff(data.x), dt, rtol=1e-6, atol=1e-9):
+            raise ValueError(f"{data.path}: ACF lags must start at 0 with a constant step.")
+        processing = processing_from_config(item.get("processing", "kim2023"), max_lag=data.x[-1])
+        group = f"acf_{component}" if label is None else f"acf_{label}_{component}"
+        acfs.append(
+            ACFObservation(
+                component=component,
+                ray_p=float(item["ray_p"]),
+                processing=processing,
+                values=data.value,
+                sigma=data.sigma,
+                window=tuple(float(v) for v in item["window"]),
+                name=group,
+                noise_parameter=_noise(group, comp_cfg.get("noise"), parameters),
+                dt=dt,
+                snr=None if item.get("snr") is None else float(item["snr"]),
+                **({"duration": float(settings["duration"])} if "duration" in settings else {}),
+            )
+        )
+        files[group] = str(data.path)
+    blocks, source = _acf_correlations(item.get("error_correlation"), acfs, path)
+    if source is not None:
+        files["acf_errors" if label is None else f"acf_{label}_errors"] = source
+    return acfs, blocks
 
 
 def _acf_correlations(config, acfs: list[ACFObservation], path) -> tuple[list, str | None]:
