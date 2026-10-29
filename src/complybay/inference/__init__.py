@@ -3,6 +3,8 @@
 from complybay.inference.diagnostics import effective_sample_size, split_rhat
 from complybay.inference.ensemble import derived_quantities, model_ensemble
 from complybay.inference.likelihood import (
+    BlockFit,
+    ErrorCorrelation,
     GroupFit,
     JointLikelihood,
     LikelihoodEvaluation,
@@ -27,9 +29,11 @@ from complybay.inference.samplers import (
 
 __all__ = [
     "ACFObservation",
+    "BlockFit",
     "ChainResult",
     "ComplianceObservation",
     "DispersionObservation",
+    "ErrorCorrelation",
     "GroupFit",
     "JointLikelihood",
     "LikelihoodEvaluation",

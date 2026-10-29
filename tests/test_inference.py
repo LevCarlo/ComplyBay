@@ -12,6 +12,7 @@ from complybay.inference import (
     ACFObservation,
     ComplianceObservation,
     DispersionObservation,
+    ErrorCorrelation,
     JointLikelihood,
     PosteriorTarget,
     predict,
@@ -107,6 +108,36 @@ def test_noise_scale_term_and_its_optimum():
     grid = np.linspace(-0.5, 0.8, 2601)
     best = grid[np.argmax([lik.evaluate(truth, {"h": g}).log_likelihood for g in grid])]
     assert 10**best == pytest.approx(k, rel=2e-3)
+
+
+def test_error_correlation_block_in_the_joint_likelihood():
+    target, theta, truth = _setup()
+    obs = target.likelihood.observations
+    rng = np.random.default_rng(0)
+    noisy = tuple(
+        ACFObservation(
+            o.component,
+            0.06,
+            KIM,
+            o.values + 0.05 * rng.standard_normal(o.values.size),
+            0.05,
+            WINDOW,
+            noise_parameter=o.noise_parameter,
+        )
+        for o in obs[2:]
+    )
+    n = int(noisy[0].mask.sum())
+    params = {"noise.acf_z": 0.1, "noise.acf_p": -0.2}
+    independent = JointLikelihood(noisy).evaluate(truth, params)
+    # An identity correlation over both components is the independent likelihood.
+    identity = ErrorCorrelation(("acf_vertical", "acf_pressure"), np.eye(2 * n), 1.0)
+    blocked = JointLikelihood(noisy, (identity,)).evaluate(truth, params)
+    assert blocked.log_likelihood == pytest.approx(independent.log_likelihood, rel=1e-10)
+    assert blocked.blocks[0].k == 2 * n and np.isnan(blocked.groups[0].log_likelihood)
+    with pytest.raises(ValueError, match="fitted samples"):
+        JointLikelihood(noisy, (ErrorCorrelation(("acf_vertical",), np.eye(n + 1)),))
+    with pytest.raises(ValueError, match="unknown observations"):
+        JointLikelihood(noisy, (ErrorCorrelation(("acf_radial",), np.eye(n)),))
 
 
 def test_prior_failures_skip_the_forward_calculation():

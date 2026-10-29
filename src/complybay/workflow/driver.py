@@ -142,17 +142,37 @@ def _write_predictive(setup, result, out, attrs, logger, files):
     best_theta = flat[int(np.argmax(log_post))]
     best_eval = setup.target.evaluate(best_theta)
     groups = best_eval.likelihood.groups
+    blocks = best_eval.likelihood.blocks
+    correlated = {m for b in blocks for m in b.members}
     for g in groups:
+        note = "  (lags taken as independent)" if g.name in correlated else ""
         logger.info(
-            "best sample, %-16s chi2/N = %6.2f  noise scale h = %.3f", g.name, g.chi2 / g.n, g.scale
+            "best sample, %-16s chi2/N = %6.2f  noise scale h = %.3f%s",
+            g.name,
+            g.chi2 / g.n,
+            g.scale,
+            note,
         )
+    for b in blocks:
+        logger.info(
+            "best sample, correlated %s: chi2/k = %.2f with k = %d retained eigenvectors",
+            b.name,
+            b.chi2 / b.k,
+            b.k,
+        )
+    block_attrs = {}
+    for b in blocks:
+        block_attrs[f"block_{b.name}_best_chi2"] = float(b.chi2)
+        block_attrs[f"block_{b.name}_k"] = int(b.k)
     files["posterior_predictive"] = out / "posterior_predictive.nc"
     dataset = predictive_dataset(
         observations,
         [np.asarray(p) for p in predictions],
         [g.prediction for g in groups],
         groups,
-        attrs=attrs | {"stage": "posterior", "best_log_posterior": float(best_eval.log_posterior)},
+        attrs=attrs
+        | block_attrs
+        | {"stage": "posterior", "best_log_posterior": float(best_eval.log_posterior)},
     )
     write_netcdf(dataset, files["posterior_predictive"])
 

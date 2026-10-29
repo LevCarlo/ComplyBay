@@ -84,6 +84,17 @@ option that restores the old behavior where one exists.
 - Derived quantities `vs_sqrt_mean.<segment>` ((mean of sqrt Vs)^2) and
   `vs_mid.<segment>` (Vs at mid-depth) in `<stage>_model.nc`: the sediment
   Vs summaries best fixed in the synthetic tests.
+- Correlated ACF errors: `complybay.acf.stack_errors` (stack, sigma and the
+  lag/component error correlation from per-event ACFs, shrunk towards the
+  processing theory), `processing_error_correlation` (theory for additive
+  noise, checked against simulations), `ErrorCorrelation` blocks in
+  `JointLikelihood` (rank-reduced Gaussian with per-group noise scales), the
+  `Observations.acf.error_correlation` key (`none` default, `processing`,
+  `{file: acf_errors.nc}`) and `complybay.io.write_acf_errors` /
+  `read_acf_errors`. `tools/make_synthetic_example.py --events N` writes
+  event-based ACFs (`examples/synthetic/obs_events.yaml`);
+  `tools/acf_correlation_test.py` compares the error models. Default results
+  are unchanged.
 - `tools/data_subset_test.py`: inverts the synthetic example with every
   combination of data groups; results in `docs/synthetic_tests.md`.
 - Regression baseline of the v0.1 forward outputs
@@ -125,3 +136,5 @@ option that restores the old behavior where one exists.
   Vp-based density relations fail there; it will be replaced together with
   the inversion layer.
 - No solver includes attenuation (Q).
+- The `snr` correction of noisy ACF amplitudes leaves a bias of several stack
+  sigmas in simulations (`docs/forward.md`).

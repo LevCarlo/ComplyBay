@@ -40,10 +40,68 @@ The default design has four: compliance, dispersion, Z-ACF and P-ACF. The
 residuals the best scale is h_k^2 = chi2_k / N_k. Without a noise parameter
 the stated sigma is used as is.
 
-Samples are treated as independent. ACF lags are correlated, so with the
-stated sigma the ACF weight is too high by roughly the number of lags per
-correlation length; the noise scale only corrects the overall level. A
-correlated covariance is left for real-data work.
+Samples are independent unless an `ErrorCorrelation` covers them (next
+section). A noise scale corrects the overall error level, not a correlation:
+with independent lags fitted to correlated errors, chi2 / N is still about 1
+and h about 1, but the ACF counts as N independent data instead of a handful.
+
+## Correlated ACF errors
+
+The processing correlates the errors of neighbouring lags, and Z and P ACFs
+of the same events share the source wavelet, so their errors are correlated
+with each other too. How many independent pieces of information a kim2023
+ACF over 0.3-8 s (155 lags) holds, from simulations of the processing
+(`tests/test_acf_errors.py`, scratch Monte Carlo of this work):
+
+| errors from | effective N (trace(R)^2 / sum R^2) |
+|---|---|
+| additive white noise (theory = simulation) | 20 (Z or P) |
+| random source wavelets, stack of synthetic events | 3.5-5 (Z), 4-6 (Z and P together; Z-P correlation ~0.45 at equal lag) |
+
+`JointLikelihood(observations, correlations=(ErrorCorrelation(...),))` takes
+blocks of correlated observations. A block holds the correlation R over the
+fitted samples of its members (concatenated). Because R is close to
+singular, only its leading k eigenvectors are kept (`variance_fraction`,
+default 0.99, assumed), and the block contributes the Gaussian log density of
+y = Q^T z (z: residuals / sigma, Q = V l^-1/2):
+
+    log L_block = -1/2 y^T M^-1 y - 1/2 ln det M,   M = Q^T D R D Q
+
+with D the noise scale h of each member on its samples (one h: M = h^2 I,
+i.e. -1/2 |y|^2 / h^2 - k ln h). Keeping all eigenvectors (with or without a
+diagonal "nugget") is wrong in practice: the residual has no variance along
+the discarded directions, so chi2 ~ chi2_k while the h term counts N, and h is
+driven to about sqrt(k / N).
+
+Calibration (Monte Carlo: stacks of 30 or 100 simulated events with random
+source wavelets and noise, residual = stack minus the mean of 20 000
+events): with 99 % of the variance kept, chi2 / k averaged 1.0-1.1 (k about
+30 of 155) for the event-estimated correlation, the processing theory and the
+true correlation alike; 99.9 % gave 1.0-1.25. With independent lags chi2 / N
+averaged 1.0 but scattered with sd 0.4-0.5 instead of the 0.11 of chi2_N / N,
+the signature of correlated errors.
+
+Where the correlation comes from (`complybay.acf.errors`):
+
+- `stack_errors(event_acfs, dt, window, processing=...)`: from the per-event
+  ACFs (preferred). sigma of the linear stack = std / sqrt(n); the sample
+  correlation inside the window, joint over components, shrunk towards the
+  processing theory with the Schafer & Strimmer (2005) weight (fewer events
+  than lags make the raw estimate singular). Written by
+  `complybay.io.write_acf_errors` as `acf_errors.nc`.
+- `processing_error_correlation(processing, lags, dt, expected=...)`: theory
+  for additive noise that is white after whitening, to first order: raw ACF
+  errors independent per lag, times (1 - sinc(W tau))^2 for whitening over W
+  Hz, convolved with the filter kernel, tapered, plus the zero-lag
+  normalization term -m(tau) e(0) with m the expected ACF. It matches
+  simulations of the full processing to the Monte Carlo error (max 0.055 over
+  all pairs of 155 lags); without the normalization term it was off by up to
+  0.25 at short lags. It does not describe source-generated errors, which are
+  correlated along the structure's reverberations (effective N about half the
+  theory's or less), so it is a fallback when no event ACFs are available.
+
+In `obs.yaml`: `Observations.acf.error_correlation: none | processing |
+{file: acf_errors.nc}` (`docs/workflow.md`).
 
 A solver exception or a non-finite prediction (for example a dispersion mode
 with no root) gives log L = -inf with the reason.

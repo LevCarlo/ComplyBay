@@ -124,3 +124,63 @@ What this shows:
   leaving needs basement and Vp to move together. Check the best log
   posterior per chain, and consider parallel tempering or more chains for
   real data.
+
+## 4. Correlated ACF errors
+
+`python tools/acf_correlation_test.py examples/synthetic runs/acf_correlation`
+(about 15 min with 4 processes per run) fits `examples/synthetic/obs_events.yaml`:
+compliance and dispersion of the example, and Z and P ACFs that are linear
+stacks of 60 synthetic events of the true model with random 3 s source
+wavelets and no additive noise (`tools/make_synthetic_example.py --events 60`),
+so the stack errors come from the sources only. Three settings of
+`Observations.acf.error_correlation` (`docs/inference.md`):
+
+- `independent`: lags and components independent (the old likelihood),
+- `processing`: the additive-noise theory, per component,
+- `events`: estimated from the 60 event ACFs, Z and P jointly (shrinkage
+  weight 0.075; 43 of 310 eigenvectors kept).
+
+Run on commit 1ef243a plus the correlated-error changes. 90 % intervals
+(`*`: truth outside); h: posterior median ACF noise scales (Z, P).
+
+| case | basement | vp | tp2 | ts2 | vs_sqrt_mean | vs_mid | h (Z, P) | max R-hat |
+|---|---|---|---|---|---|---|---|---|
+| CDZP independent | 0.598-0.601 | 1.739-1.749* | 0.6868-0.6881* | 3.68-3.72 | 0.367-0.393* | 0.379-0.414* | 1.23, 1.39 | 1.377 |
+| CDZP processing | 0.593-0.604 | 1.726-1.755 | 0.6862-0.6888* | 3.68-3.80 | 0.362-0.400 | 0.374-0.424 | 1.81, 1.43 | 1.049 |
+| CDZP events | 0.594-0.601 | 1.730-1.749* | 0.6860-0.6878* | 3.63-3.71 | 0.364-0.389* | 0.376-0.408* | 2.24, 1.70 | 1.039 |
+| ZP independent | 0.598-0.601 | 1.739-1.750* | 0.6868-0.6882* | 3.67-3.72 | 0.355-0.394 | 0.365-0.416 | 1.23, 1.36 | 3.050 |
+| ZP events | 0.593-0.601 | 1.728-1.748* | 0.6859-0.6882* | 3.64-3.79 | 0.337-0.451 | 0.340-0.489 | 2.32, 1.71 | 1.403 |
+| truth | 0.600 | 1.750 | 0.6857 | 3.70 | 0.363 | 0.375 | | |
+
+What this shows:
+
+- **Independent lags overstate what the ACF fixes.** With correlated errors
+  the intervals of the quantities the ACF controls widen: CDZP basement depth
+  by 1.8x (events) to 3x (processing), Vp 1.9x to 2.9x, `tp2` 1.4x to 2x;
+  with the ACFs alone (ZP) basement and Vp by 2x and `vs_sqrt_mean` by 3x.
+  The truth falls outside 6 of the 9 quantities' intervals with independent
+  lags (CDZP), 2 with `processing` and 4 with `events`, the remaining misses
+  being narrow (Vp 1.749 against 1.750, `vs_sqrt_mean` 0.364 against 0.363).
+- **The stack does not equal the forward ACF of the true model.** At the truth
+  with h = 1 the ACFs give chi2/N = 1.6 (Z) and 2.2 (P) with lags taken as
+  independent, and chi2/k = 4.8 in the correlated block (k = 43): the mean
+  over events of the windowed, whitened event ACF differs from the
+  spectral-ratio prediction by about twice the stack sigma (std / sqrt(60)),
+  which only describes the scatter between events. So h rises above 1 (1.4-2.3)
+  in every case, and `tp2` is missed in all of them by 0.0002-0.0011 s, a bias
+  that more events would not remove. On real data structure misfit adds to
+  this: keep the ACF noise scales free and read h as the size of the
+  unmodelled part.
+- **Which correlation to use.** `events` keeps the Z-P cross-correlation and
+  the source-generated correlation that `processing` lacks, and is preferred
+  when per-event ACFs exist; `processing` assumes more independent pieces of
+  information than the source-generated errors have, but here gave the wider
+  intervals, because its h is free to absorb the difference. Either is better
+  than independent lags.
+- **Noise-free stacks make the ACF fix ts2.** Unlike test 1, the ACFs alone
+  narrow `ts2` (3.64-3.79 s): with no additive noise the stack sigma is small
+  enough for the converted phases to count. This is specific to the
+  noise-free events, not a property of real stacks.
+- **Convergence.** ZP independent (R-hat 3.05) and ZP events (1.40) did not
+  converge in 30000 steps: without compliance the sediment Vs is weakly fixed
+  and chains stay in separate modes, as in test 1's CZP case.

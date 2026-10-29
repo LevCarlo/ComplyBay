@@ -162,7 +162,8 @@ def build_inversion(
     )
     target = None
     if observations is not None:
-        target = PosteriorTarget(prior, JointLikelihood(observations.observations))
+        likelihood = JointLikelihood(observations.observations, observations.correlations)
+        target = PosteriorTarget(prior, likelihood)
     return InversionSetup(
         parameterization=parameterization,
         prior=prior,

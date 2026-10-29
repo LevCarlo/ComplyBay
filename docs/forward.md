@@ -97,6 +97,17 @@ amplitude N = sqrt(sum |S|^2 / (L (SNR^2 - 1))) is added to the synthetic
 amplitude spectrum before processing. The sum is taken over the processed band
 of a unit-impulse synthetic; the paper leaves both choices open.
 
+How well this models noisy stacks is open. In simulations (synthetic events:
+the true response of the example model to random 3 s source wavelets plus
+white noise, kim2023, 1000 events) the stack sat 9-17 stack sigmas (for 60
+events) from the noise-free synthetic; `snr` from the broadband SNR reduced
+that to 3-4, `snr` from the SNR within the processed band to 2-3, and adding
+the noise in power (sqrt(|S|^2 + N^2)) instead of amplitude with the in-band
+SNR to 0.5-2. Noise-free events stack to within about 1 sigma (the residual
+is the source spectrum that whitening does not flatten). Measure SNR in the
+processing band, and treat the amplitude of noisy ACFs with care until this is
+settled.
+
 The narrower band is what makes `kim2023` ACFs look smoother; normalizing at
 t = 0 also keeps reflection amplitudes meaningful, whereas normalizing to the
 maximum after tapering makes them depend on the taper.

@@ -36,6 +36,14 @@ Whitespace-separated, `#` comments, three columns `x  value  sigma`:
 | `dispersion` | period (s) | phase velocity (km/s) |
 | `acf` components | lag (s), starting at 0 with a constant step | stacked ACF |
 
+For the ACF, `error_correlation` (in `Observations.acf`) sets the error
+correlation between lags: `none` (default, independent), `processing`
+(theory, per component) or `{file: acf_errors.nc}` (from the event ACFs,
+written by `complybay.acf.stack_errors` and `complybay.io.write_acf_errors`;
+the stacks in it must equal the data files). Both mapping forms take
+`variance_fraction` (default 0.99). See `docs/inference.md`; an example is
+`examples/synthetic/obs_events.yaml`.
+
 For the ACF, the sampling step `dt` and `max_lag` come from the lag column,
 and the processing (`kim2023`, `tauzin2019`, `{preset: ..., <overrides>}` or a
 full mapping of `whitening`, `filters`, `zero_lag_taper`, `normalize`,

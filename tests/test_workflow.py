@@ -88,6 +88,35 @@ def test_configuration_errors_are_explicit():
     assert "noise.compliance" not in setup.names  # sigma used as given
 
 
+def test_acf_error_correlation_forms():
+    model, obs = load_yaml(EXAMPLE / "model.yaml"), load_yaml(EXAMPLE / "obs_events.yaml")
+    joint = build_inversion(model, obs, obs_dir=EXAMPLE).target.likelihood
+    (block,) = joint.correlations
+    assert block.members == ("acf_vertical", "acf_pressure") and block.correlation.shape == (
+        310,
+        310,
+    )
+    assert block.k < 100  # far fewer independent pieces than 310 lags
+
+    theory = copy.deepcopy(obs)
+    theory["Observations"]["acf"]["error_correlation"] = "processing"
+    blocks = build_inversion(model, theory, obs_dir=EXAMPLE).target.likelihood.correlations
+    assert [b.members for b in blocks] == [("acf_vertical",), ("acf_pressure",)]
+
+    none = copy.deepcopy(obs)
+    del none["Observations"]["acf"]["error_correlation"]
+    assert build_inversion(model, none, obs_dir=EXAMPLE).target.likelihood.correlations == ()
+
+    mismatched = copy.deepcopy(obs)
+    mismatched["Observations"]["acf"]["components"]["vertical"]["file"] = "acf_z.dat"
+    with pytest.raises(ValueError, match="stack differs"):
+        build_inversion(model, mismatched, obs_dir=EXAMPLE)
+    bad = copy.deepcopy(obs)
+    bad["Observations"]["acf"]["error_correlation"] = {"model": "processing", "file": "x.nc"}
+    with pytest.raises(ValueError, match="exactly one"):
+        build_inversion(model, bad, obs_dir=EXAMPLE)
+
+
 def test_processing_config_forms():
     assert processing_from_config("kim2023", max_lag=12.0).max_lag == 12.0
     custom = processing_from_config(

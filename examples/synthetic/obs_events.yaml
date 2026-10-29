@@ -1,0 +1,32 @@
+# The synthetic example with event-based ACFs: the Z and P ACFs are linear
+# stacks of 60 synthetic events (random source wavelets), as real data would
+# be made, and their errors are correlated between lags and between Z and P
+# (acf_errors.nc). Compliance and dispersion are those of obs.yaml.
+# Made by: python tools/make_synthetic_example.py examples/synthetic --events 60
+
+Station:
+  name: SYN01
+  water: {depth_km: 2.0}
+
+Observations:
+  compliance:
+    file: compliance.dat
+    noise: {bounds: [-0.5, 0.5]}
+  dispersion:
+    file: vph.dat
+    wave: rayleigh
+    mode: 0
+    noise: {bounds: [-0.5, 0.5]}
+  acf:
+    processing: kim2023
+    ray_p: 0.06
+    window: [0.3, 8.0]
+    error_correlation: {file: acf_errors.nc}   # none: lags and components independent
+    components:
+      vertical: {file: acf_z_events.dat, noise: {bounds: [-0.5, 1.0]}}
+      pressure: {file: acf_p_events.dat, noise: {bounds: [-0.5, 1.0]}}
+
+Forward:
+  compliance: {wavenumber: exact}
+  dispersion: {algorithm: dunkin, dc: 0.005}
+  acf: {duration: 200.0}

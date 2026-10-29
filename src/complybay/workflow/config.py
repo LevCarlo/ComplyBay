@@ -20,6 +20,7 @@
         ray_p: 0.06                  # s/km, mean of the stacked events
         window: [0.3, 8.0]           # s, lags that enter the likelihood
         snr: null                    # Kim et al. (2023) noise level in the synthetics
+        error_correlation: none      # or processing, or {file: acf_errors.nc}; see below
         components:
           vertical: {file: acf_z.dat, noise: {...}}
           pressure: {file: acf_p.dat, noise: {...}}
@@ -34,6 +35,14 @@ with ``noise`` gets a sampled ``noise.<group>`` parameter (log10 of its noise
 scale; defaults: bounds [-0.5, 0.5], initial 0, proposal sigma 0.05); without
 ``noise`` its sigma is used as given. Relative file paths are relative to the
 YAML file. Unknown keys are errors, so typos do not pass silently.
+
+``Observations.acf.error_correlation`` sets how ACF errors are correlated
+between lags (:mod:`complybay.acf.errors`, :class:`ErrorCorrelation`):
+``none`` (default, independent lags), ``processing`` (theory for additive
+noise, per component, with the observed ACF as the expected one), or
+``{file: acf_errors.nc}`` (written by :func:`complybay.io.write_acf_errors`
+from the event ACFs; one joint block for all components, so Z-P correlation
+is kept). Either mapping form takes ``variance_fraction`` (default 0.99).
 """
 
 from __future__ import annotations
@@ -54,14 +63,17 @@ from complybay.acf import (
     Lowpass,
     Whitening,
     preset,
+    processing_error_correlation,
 )
 from complybay.inference import (
     ACFObservation,
     ComplianceObservation,
     DispersionObservation,
+    ErrorCorrelation,
     Observation,
 )
-from complybay.io import read_three_columns
+from complybay.inference.likelihood import DEFAULT_VARIANCE_FRACTION
+from complybay.io import read_acf_errors, read_three_columns
 from complybay.model import WaterLayer
 from complybay.parameterization import DiscretizationConfig
 
@@ -224,6 +236,7 @@ class ObservationSet:
     observations: tuple[Observation, ...]
     noise_parameters: tuple[dict, ...]  # parameter configs appended to the model parameters
     files: dict[str, str] = field(default_factory=dict)  # group -> data file
+    correlations: tuple[ErrorCorrelation, ...] = ()
 
 
 def observations_from_config(obs_cfg: Mapping, base_dir: str | Path) -> ObservationSet:
@@ -272,7 +285,11 @@ def observations_from_config(obs_cfg: Mapping, base_dir: str | Path) -> Observat
 
     if "acf" in groups:
         item = dict(groups["acf"])
-        check_keys(item, {"processing", "ray_p", "window", "snr", "components"}, "Observations.acf")
+        check_keys(
+            item,
+            {"processing", "ray_p", "window", "snr", "components", "error_correlation"},
+            "Observations.acf",
+        )
         settings = dict(forward.get("acf") or {})
         check_keys(settings, {"duration"}, "Forward.acf")
         components = dict(item.get("components") or {})
@@ -305,10 +322,59 @@ def observations_from_config(obs_cfg: Mapping, base_dir: str | Path) -> Observat
                 )
             )
             files[group] = str(data.path)
+        acfs = [o for o in observations if isinstance(o, ACFObservation)]
+        correlations, source = _acf_correlations(item.get("error_correlation"), acfs, path)
+        if source is not None:
+            files["acf_errors"] = source
+    else:
+        correlations = []
 
     if not observations:
         raise ValueError("obs.yaml defines no observations.")
-    return ObservationSet(tuple(observations), tuple(parameters), files)
+    return ObservationSet(tuple(observations), tuple(parameters), files, tuple(correlations))
+
+
+def _acf_correlations(config, acfs: list[ACFObservation], path) -> tuple[list, str | None]:
+    """ErrorCorrelation blocks for ``Observations.acf.error_correlation``."""
+    if config is None or config == "none":
+        return [], None
+    if config == "processing":
+        config = {"model": "processing"}
+    if not isinstance(config, Mapping):
+        raise ValueError("Observations.acf.error_correlation: none, processing or a mapping.")
+    config = dict(config)
+    check_keys(config, {"model", "file", "variance_fraction"}, "Observations.acf.error_correlation")
+    fraction = float(config.get("variance_fraction", DEFAULT_VARIANCE_FRACTION))
+    if ("model" in config) == ("file" in config):
+        raise ValueError("Observations.acf.error_correlation needs exactly one of model, file.")
+    if "model" in config:
+        if config["model"] != "processing":
+            raise ValueError("Observations.acf.error_correlation.model must be 'processing'.")
+        blocks = [
+            ErrorCorrelation(
+                (o.name,),
+                processing_error_correlation(o.processing, o.lags[o.mask], o.dt, expected=o.values),
+                fraction,
+            )
+            for o in acfs
+        ]
+        return blocks, None
+    source = path(config)
+    errors = read_acf_errors(source)
+    components = [o.component for o in acfs]
+    missing = [c for c in components if c not in errors.components]
+    if missing:
+        raise ValueError(f"{source}: no error correlation for components {missing}.")
+    for o in acfs:
+        if errors.lags.size != o.lags.size or not np.allclose(errors.lags, o.lags):
+            raise ValueError(f"{source}: lag grid differs from the {o.name} data file.")
+        if not np.allclose(errors.stack[o.component], o.values, rtol=0, atol=1e-6):
+            raise ValueError(f"{source}: stack differs from the {o.name} data file.")
+    lags = acfs[0].lags[acfs[0].mask]
+    if any(not np.array_equal(o.mask, acfs[0].mask) for o in acfs):
+        raise ValueError("A joint error correlation needs the same window for all components.")
+    block = ErrorCorrelation(tuple(o.name for o in acfs), errors.block(components, lags), fraction)
+    return [block], str(source)
 
 
 def model_parameter_configs(model_cfg: Mapping[str, Any]) -> list[dict]:

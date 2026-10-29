@@ -14,6 +14,10 @@ Three files per run stage (``prior`` or ``posterior``):
   fitted mask, predictions of a subset of samples, and the prediction of the
   best (highest posterior) sample with its chi2 and noise scale.
 
+``acf_errors.nc`` (:func:`write_acf_errors`): a stacked ACF with its sigma
+and the error correlation between lags and components, the input of
+``error_correlation: {file: ...}`` in ``obs.yaml``.
+
 Run metadata (code version, configuration files, seed, ...) is in the global
 attributes of every file.
 """
@@ -24,6 +28,8 @@ from collections.abc import Mapping, Sequence
 
 import numpy as np
 import xarray as xr
+
+from complybay.acf.errors import StackErrors
 
 QUANTILES = (0.05, 0.16, 0.5, 0.84, 0.95)
 
@@ -158,3 +164,60 @@ def predictive_dataset(
 
 def write_netcdf(dataset: xr.Dataset, path) -> None:
     dataset.to_netcdf(path, engine="h5netcdf")
+
+
+def acf_errors_dataset(errors, *, attrs=None) -> xr.Dataset:
+    """A :class:`complybay.acf.StackErrors` as a dataset (see :func:`read_acf_errors`)."""
+    components = list(errors.components)
+    p = errors.window_lags.size
+    corr = errors.correlation.reshape(len(components), p, len(components), p)
+    return xr.Dataset(
+        data_vars={
+            "stack": (("component", "lag"), np.stack([errors.stack[c] for c in components])),
+            "sigma": (("component", "lag"), np.stack([errors.sigma[c] for c in components])),
+            "correlation": (("component", "window_lag", "component_2", "window_lag_2"), corr),
+        },
+        coords={
+            "component": components,
+            "component_2": components,
+            "lag": errors.lags,
+            "window_lag": errors.window_lags,
+            "window_lag_2": errors.window_lags,
+        },
+        attrs=_attrs(
+            {
+                **dict(errors.attrs),
+                **dict(attrs or {}),
+                "description": "Linear ACF stack, its sigma and the error correlation between "
+                "lags and components (complybay.acf.stack_errors)",
+                "n_events": errors.n_events,
+                "shrinkage": errors.shrinkage,
+                "shrinkage_target": errors.target,
+            }
+        ),
+    )
+
+
+def write_acf_errors(errors, path, *, attrs=None) -> None:
+    write_netcdf(acf_errors_dataset(errors, attrs=attrs), path)
+
+
+def read_acf_errors(path):
+    """Read a file written by :func:`write_acf_errors` back into a ``StackErrors``."""
+    with xr.open_dataset(path, engine="h5netcdf") as ds:
+        components = tuple(str(c) for c in ds["component"].values)
+        p = ds.sizes["window_lag"]
+        n = len(components)
+        attrs = dict(ds.attrs)
+        return StackErrors(
+            lags=ds["lag"].values.copy(),
+            components=components,
+            stack={c: ds["stack"].sel(component=c).values.copy() for c in components},
+            sigma={c: ds["sigma"].sel(component=c).values.copy() for c in components},
+            window_lags=ds["window_lag"].values.copy(),
+            correlation=ds["correlation"].values.reshape(n * p, n * p).copy(),
+            n_events=int(attrs.pop("n_events")),
+            shrinkage=float(attrs.pop("shrinkage")),
+            target=str(attrs.pop("shrinkage_target")),
+            attrs=attrs,
+        )
