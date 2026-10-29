@@ -21,7 +21,6 @@ import sys
 from pathlib import Path
 
 import numpy as np
-
 from ComplyBay.forward import k_solver
 from ComplyBay.forward.ncomp_fortran import ncomp_fortran, ncomp_fortran_batch
 from ComplyBay.forward.ncomp_matlab_py import calc_ncomp_mat

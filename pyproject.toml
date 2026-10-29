@@ -41,6 +41,12 @@ target-version = "py310"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B"]
 
+[tool.ruff.lint.isort]
+# tools/make_legacy_baseline.py imports the v0.1 package name ComplyBay; on a
+# case-insensitive filesystem ruff would take it for src/complybay (first party)
+# and sort it differently than on Linux CI.
+known-third-party = ["ComplyBay"]
+
 [tool.ruff.lint.per-file-ignores]
 # Legacy modules carried over from v0.1; they are rewritten in the forward-solver
 # refactor, so only formatting-level fixes were applied here.

@@ -78,7 +78,7 @@ def _run_attrs(setup: InversionSetup, model_file, obs_file) -> dict:
     return {
         "complybay_version": complybay.__version__,
         "git_commit": _git_commit(),
-        "created": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
+        "created": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         "model_file": str(Path(model_file).resolve()),
         "obs_file": None if obs_file is None else str(Path(obs_file).resolve()),
         "station": setup.station,
