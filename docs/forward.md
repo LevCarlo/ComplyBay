@@ -23,6 +23,60 @@ lags, acf_z = synthetic_acf(model, 0.06, preset("tauzin2019"), component="vertic
 lags, acf_p = synthetic_acf(model, 0.06, preset("tauzin2019"), component="pressure")
 ```
 
+## Attenuation (`forward.attenuation`)
+
+`LayeredModel(..., qp=..., qs=..., q_reference_frequency=1.0)` makes layers
+attenuating with constant quality factors (`inf` = elastic; default reference
+1 Hz, assumed). Their `vp` and `vs` are then **phase velocities at the
+reference frequency**, and every solver disperses them to its own
+frequencies with the constant-Q model of Kjartansson (1979):
+
+    v~(f) = v_ref cos(pi gamma / 2) (f / f_ref)^gamma exp(-i pi gamma / 2),
+    gamma = arctan(1 / Q) / pi,
+
+so the phase velocity is v_ref (f / f_ref)^gamma, about
+1 + ln(f / f_ref) / (pi Q): for Qs = 20, Vs at 0.01 Hz is 7 % below Vs at
+1 Hz.
+
+| solver | how Q enters |
+|---|---|
+| ACF response | complex velocities per frequency: attenuation and dispersion (eigenvectors per frequency for attenuating layers) |
+| compliance | real velocities at each frequency (`dispersed`); the imaginary moduli change \|eta\| only at order 1/Q^2 |
+| phase velocity | real velocities at 1 / period, one disba call per period (first-order physical dispersion) |
+
+Without Q every solver runs its elastic code, so results are unchanged bit
+for bit. Cost with an attenuating sediment (12 layers) in the synthetic
+example: 24 ms per posterior evaluation against 6 ms elastic, half of it the
+per-period disba calls.
+
+Checked against: Q = Re M / -Im M and the phase-velocity power law for the
+formula itself; an independent normal-incidence acoustic propagator with
+complex velocities (ACF response, rtol 1e-9); the static half-space
+compliance at the dispersed velocities (within the dynamic correction); the
+Rayleigh speed of a homogeneous half-space with Qp = Qs, which scales exactly
+by (f / f_ref)^gamma; and the elastic limit (Q = 1e12).
+
+**What sediment Q changes** (synthetic example, 2 km water, sediment 0.6 km,
+Vs 0.15-0.6 km/s, Q in the sediment only; mean (Delta / sigma)^2 per datum
+for the true model, largest |Delta| / sigma in brackets, the data sigma of the
+example):
+
+| Qs | Qp | f_ref (Hz) | compliance | dispersion | ACF Z | ACF P |
+|---|---|---|---|---|---|---|
+| 10 | inf | 1 | 1.85 (2.4) | 0.003 (0.16) | 0.003 (0.14) | 0.002 (0.15) |
+| 20 | inf | 1 | 0.41 (1.1) | 0.001 (0.07) | 0.001 (0.11) | 0.001 (0.12) |
+| 50 | inf | 1 | 0.06 (0.4) | 0.000 (0.02) | 0.000 (0.06) | 0.000 (0.08) |
+| 20 | 100 | 1 | 0.51 (1.2) | 0.002 (0.12) | 0.008 (0.30) | 0.007 (0.27) |
+| 20 | 30 | 1 | 0.92 (1.2) | 0.006 (0.24) | 0.070 (0.82) | 0.068 (0.93) |
+| 20 | 100 | 0.01 | 0.01 (0.3) | 0.001 (0.12) | 0.056 (0.96) | 0.056 (0.92) |
+| 20 | 100 | 0.1 | 0.09 (0.4) | 0.000 (0.01) | 0.021 (0.59) | 0.019 (0.52) |
+
+The ACF barely sees Qs and sees Qp only when Qp is a few tens. Most of the effect is velocity dispersion: it moves
+whichever data lie far from the reference frequency, compliance for 1 Hz,
+the ACF for 0.01 Hz. Q thus mainly says **at which frequency the model's
+velocities hold**; an elastic model fitted to all three data types takes
+velocities that compromise between the bands.
+
 ## Compliance (`forward.compliance`)
 
 Infragravity-wave loading with wavenumber from `omega^2 = g k tanh(k H)`,

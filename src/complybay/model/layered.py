@@ -8,6 +8,13 @@ at their own boundary.
 An :class:`OBSModel` is a water column (or none, for a land station) on top of
 a :class:`LayeredModel`: ``n`` finite solid layers over a half-space, so the
 property arrays have ``n + 1`` entries and ``thickness`` has ``n``.
+
+Attenuation: optional ``qp`` and ``qs`` per layer (constant quality factors,
+``inf`` = elastic). With them, ``vp`` and ``vs`` are phase velocities at
+``q_reference_frequency`` (Hz) and every solver disperses them to its own
+frequencies (:mod:`complybay.forward.attenuation`). Without them the model is
+elastic and the velocities do not depend on frequency. The water column is
+elastic.
 """
 
 from __future__ import annotations
@@ -18,6 +25,9 @@ from typing import Literal
 import numpy as np
 
 Property = Literal["vp", "vs", "rho"]
+# Assumed: velocities of an attenuating model are those at 1 Hz, the usual
+# reference frequency of seismic velocity models.
+Q_REFERENCE_FREQUENCY = 1.0
 PROPERTIES: tuple[Property, ...] = ("vp", "vs", "rho")
 
 
@@ -55,6 +65,9 @@ class LayeredModel:
     vp: np.ndarray
     vs: np.ndarray
     rho: np.ndarray
+    qp: np.ndarray | None = None  # None: elastic
+    qs: np.ndarray | None = None
+    q_reference_frequency: float = Q_REFERENCE_FREQUENCY
 
     def __post_init__(self):
         thickness = _readonly(self.thickness, "thickness")
@@ -76,6 +89,27 @@ class LayeredModel:
         object.__setattr__(self, "thickness", thickness)
         for name, values in props.items():
             object.__setattr__(self, name, values)
+        for name in ("qp", "qs"):
+            values = getattr(self, name)
+            if values is None:
+                continue
+            values = np.array(values, dtype=float)
+            if values.shape != (n + 1,) or np.any(np.isnan(values)) or np.any(values <= 0):
+                raise ValueError(f"{name} needs {n + 1} positive values (inf = elastic).")
+            values.flags.writeable = False
+            object.__setattr__(self, name, values)
+        if not np.isfinite(self.q_reference_frequency) or self.q_reference_frequency <= 0:
+            raise ValueError("q_reference_frequency must be positive.")
+
+    @property
+    def attenuating(self) -> bool:
+        """True if any layer has a finite qp or qs."""
+        return any(q is not None and np.any(np.isfinite(q)) for q in (self.qp, self.qs))
+
+    def q(self, name: Literal["qp", "qs"]) -> np.ndarray:
+        """Quality factors per layer, ``inf`` where elastic or not given."""
+        values = getattr(self, name)
+        return np.full(self.n_layers + 1, np.inf) if values is None else values
 
     @classmethod
     def from_legacy_array(cls, model) -> LayeredModel:
@@ -123,11 +157,14 @@ class LayeredModel:
         counts = np.maximum(np.ceil(self.thickness / dz - 1e-9).astype(int), 1)
         thickness = np.repeat(self.thickness / counts, counts)
         repeat = np.append(counts, 1)
-        return LayeredModel(
+        return replace(
+            self,
             thickness=thickness,
             vp=np.repeat(self.vp, repeat),
             vs=np.repeat(self.vs, repeat),
             rho=np.repeat(self.rho, repeat),
+            qp=None if self.qp is None else np.repeat(self.qp, repeat),
+            qs=None if self.qs is None else np.repeat(self.qs, repeat),
         )
 
 

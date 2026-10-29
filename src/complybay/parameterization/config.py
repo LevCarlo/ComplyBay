@@ -18,12 +18,15 @@ from the current parameter values::
           vs: {type: gradient, top: {parameter: sed.vs_top}, bottom: {parameter: sed.vs_bot}}
           vp: {type: constant, value: {parameter: sed.vp}}   # optional; or vp_vs: {...}
           scaling: {rho: {method: gardner1974}}
+          qs: {type: constant, value: {parameter: sed.qs}}   # optional; also qp
         - name: crust
           vs: {type: bspline, coefficients: [...], degree: 3}
 
 Profiles: ``constant`` (value), ``gradient`` (top, bottom), ``bspline``
 (coefficients, degree, knot_spacing, knot_alpha). Relation options other
 than ``method`` are passed to the relation (``vp_vs``, ``rho``, ``a``, ``b``).
+``qp`` / ``qs`` profiles make a segment attenuating (constant Q); then the
+velocities are those at ``Model.q_reference_frequency_hz`` (default 1 Hz).
 """
 
 from __future__ import annotations
@@ -117,13 +120,17 @@ def model_from_config(
             vp=_optional_profile(item.get("vp"), values),
             name=item.get("name"),
             scaling=None if item.get("scaling") is None else scaling_from_config(item["scaling"]),
+            qp=_optional_profile(item.get("qp"), values),
+            qs=_optional_profile(item.get("qs"), values),
         )
         for index, item in enumerate(model_cfg["segments"])
     )
+    reference = model_cfg.get("q_reference_frequency_hz")
     return ParameterizedModel(
         segments=segments,
         interfaces=interfaces,
         scaling=scaling_from_config(model_cfg.get("scaling")),
+        **({} if reference is None else {"q_reference_frequency": float(reference)}),
     )
 
 

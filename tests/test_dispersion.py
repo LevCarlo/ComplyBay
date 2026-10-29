@@ -60,6 +60,18 @@ def test_output_follows_input_order_and_marks_missing_roots():
     assert np.isnan(phase_velocity(model, [100.0], mode=1)[0])
 
 
+def test_attenuating_halfspace_rayleigh_speed_follows_the_dispersion():
+    # A homogeneous half-space is non-dispersive; with Qp = Qs both velocities scale
+    # by (f / f_ref)^gamma, so the Rayleigh speed does too (exactly).
+    q = 15.0
+    solid = LayeredModel([], [6.0], [3.5], [2.7], qp=[q], qs=[q])
+    periods = np.array([2.0, 10.0, 50.0])
+    elastic = phase_velocity(OBSModel(LayeredModel([], [6.0], [3.5], [2.7])), periods, dc=0.001)
+    c = phase_velocity(OBSModel(solid), periods, dc=0.001)
+    gamma = np.arctan(1 / q) / np.pi
+    np.testing.assert_allclose(c, elastic * (1 / periods) ** gamma, rtol=1e-6)
+
+
 def test_disba_arrays_put_water_first():
     thickness, vp, vs, rho = disba_arrays(OBSModel(OCEANIC, WaterLayer(4.0)))
     assert thickness[0] == 4.0 and vs[0] == 0.0 and vp[0] == 1.5

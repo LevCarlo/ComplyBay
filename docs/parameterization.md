@@ -80,6 +80,14 @@ when the parameterization is built.
 - Vp relations: `brocher2005` (Vs <= 4.5 km/s), `castagna1985` (mudrock line),
   `constant_vp_vs`. Mantle segments need a relation valid above 4.5 km/s.
 
+- Attenuation: optional `qp` and `qs` profiles per segment (constant Q,
+  `docs/forward.md`), fixed or sampled (`{type: constant, value: {parameter:
+  sed.qs}}` with a uniform prior on Q). The velocities of an attenuating
+  model are those at `Model.q_reference_frequency_hz` (default 1 Hz,
+  assumed), and so are the derived `ts2`, `tp2` and Vs averages. Layers take
+  Q at their midpoints; inside a gradational interface 1/Q is blended like
+  the velocities, an elastic neighbour counting as 1/Q = 0.
+
 ## Interfaces
 
 A gradational interface blends Vs, Vp and rho of the two neighbours with the

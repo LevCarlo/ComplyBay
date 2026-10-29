@@ -88,6 +88,22 @@ def test_halfspace_approaches_static_solution():
     assert np.all(np.abs(ratio - 1) < 1e-2)
 
 
+def test_attenuating_halfspace_uses_the_velocities_at_each_frequency():
+    # Analytic: the static half-space compliance with the constant-Q phase velocities
+    # v_ref (f / 1 Hz)^gamma at each frequency, within the dynamic correction.
+    vp, vs, rho, qp, qs = 4.0, 2.0, 2.5, 50.0, 20.0
+    solid = LayeredModel([], [vp], [vs], [rho], qp=[qp], qs=[qs])
+    model = OBSModel(solid, WaterLayer(3.0))
+    freqs = np.array([1e-3, 5e-3, 2e-2])
+    eta = compliance(model, freqs)
+    gamma_p, gamma_s = np.arctan(1 / qp) / np.pi, np.arctan(1 / qs) / np.pi
+    static = [halfspace_compliance(vp * f**gamma_p, vs * f**gamma_s, rho) for f in freqs]
+    np.testing.assert_allclose(eta / static, 1.0, atol=1e-2)
+    elastic = compliance(OBSModel(LayeredModel([], [vp], [vs], [rho]), WaterLayer(3.0)), freqs)
+    # Softer the further below the 1 Hz reference: 20 % at 1 mHz, 11 % at 20 mHz.
+    assert np.all(eta / elastic > 1.1) and np.all(np.diff(eta / elastic) < 0)
+
+
 def test_compliance_requires_water():
     with pytest.raises(ValueError):
         compliance(OBSModel(LayeredModel([], [4.0], [2.0], [2.5])), [0.01])

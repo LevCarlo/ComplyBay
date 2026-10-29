@@ -105,11 +105,20 @@ def discretize(model: ParameterizedModel, config: DiscretizationConfig) -> Layer
     else:
         vs, vp, rho = model.evaluate_properties(0.5 * (geometry.tops_km + geometry.bottoms_km))
     vs_h, vp_h, rho_h = model.evaluate_properties(np.array([geometry.zmax_km]))
+    attenuation = {}
+    if model.attenuating:
+        # 1/Q at layer midpoints (also with layer_value="mean"), inf where elastic.
+        z = np.r_[0.5 * (geometry.tops_km + geometry.bottoms_km), geometry.zmax_km]
+        with np.errstate(divide="ignore"):
+            inverse_qp, inverse_qs = model.evaluate_inverse_q(z)
+            attenuation = {"qp": 1.0 / inverse_qp, "qs": 1.0 / inverse_qs}
+        attenuation["q_reference_frequency"] = model.q_reference_frequency
     return LayeredModel(
         thickness=geometry.thickness_km,
         vp=np.r_[vp, vp_h],
         vs=np.r_[vs, vs_h],
         rho=np.r_[rho, rho_h],
+        **attenuation,
     )
 
 

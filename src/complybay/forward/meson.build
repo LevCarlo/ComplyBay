@@ -19,6 +19,7 @@ py.install_sources(
   'complykernel.py',
   'dispersion.py',
   'acf.py',
+  'attenuation.py',
   'compliance.py',
   'k_solver.py',
   'ncomp_fortran.py',

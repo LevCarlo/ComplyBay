@@ -14,6 +14,11 @@ The solid response comes from Crawford's propagator (``raydep_ft``, Fortran,
 via MDN-Compliance) evaluated at horizontal slowness k / omega. The water
 column enters only through k: compliance uses the water depth, not the water
 velocity or density.
+
+Attenuating models (finite qp/qs): each frequency uses the elastic model with
+the layers' phase velocities at that frequency
+(:func:`complybay.forward.attenuation.dispersed`); the imaginary part of the
+moduli changes |eta| only at order 1/Q^2 and is left out.
 """
 
 from __future__ import annotations
@@ -23,6 +28,7 @@ from typing import Literal
 import numpy as np
 
 from complybay.forward import raydep_ft
+from complybay.forward.attenuation import dispersed
 from complybay.forward.k_solver import solve_k_poly
 from complybay.model import OBSModel
 from complybay.model.layered import Property
@@ -122,6 +128,14 @@ def compliance(
     freqs = np.atleast_1d(np.asarray(freqs, dtype=float))
     if np.any(freqs <= 0):
         raise ValueError("Frequencies must be positive.")
+    if model.solid.attenuating:
+        settings = dict(wavenumber=wavenumber, g=g, decay_cutoff=decay_cutoff)
+        return np.array(
+            [
+                compliance(model.with_solid(dispersed(model.solid, f)), [f], **settings)[0]
+                for f in freqs
+            ]
+        )
     omega = 2 * np.pi * freqs
     k = water_wavenumber(omega, model.water_depth * 1e3, method=wavenumber, g=g)
     rows = _raydep_array(model)

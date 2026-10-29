@@ -69,23 +69,32 @@ def test_energy_flux_is_conserved(water, ray_p):
     np.testing.assert_allclose(reflected / incident, 1.0, rtol=1e-10)
 
 
-def _acoustic_chain(model, omega):
-    """Normal incidence by an independent real 2x2 (u_z, sigma_zz) propagator."""
+def _acoustic_chain(model, omega, velocity=None):
+    """Normal incidence by an independent 2x2 (u_z, sigma_zz) propagator.
+
+    ``velocity(i, w)`` gives the (complex) P velocity of solid layer i at w;
+    default the model's real vp.
+    """
 
     def prop(h, rho, vp, w):
         k, z = w / vp, w * rho * vp
         return np.array([[np.cos(k * h), np.sin(k * h) / z], [-z * np.sin(k * h), np.cos(k * h)]])
 
     solid, water = model.solid, model.water
+    if velocity is None:
+
+        def velocity(i, w):
+            return solid.vp[i]
+
     out = []
     for w in omega:
-        a = np.eye(2)
-        for h, rho, vp in zip(solid.thickness, solid.rho, solid.vp, strict=False):
-            a = prop(h, rho, vp, w) @ a
+        a = np.eye(2, dtype=complex)
+        for i, (h, rho) in enumerate(zip(solid.thickness, solid.rho, strict=False)):
+            a = prop(h, rho, velocity(i, w), w) @ a
         pw = prop(-water.thickness, water.rho, water.vp, w)
         stress_per_u = -pw[1, 0] / pw[1, 1]
         u, s = a @ np.array([1.0, stress_per_u])
-        upgoing = (u - s / (1j * w * solid.rho[-1] * solid.vp[-1])) / 2
+        upgoing = (u - s / (1j * w * solid.rho[-1] * velocity(solid.n_layers, w))) / 2
         scale = -1.0 / upgoing  # unit upward incident motion (z is down)
         out.append((-scale, -scale * stress_per_u))  # (u_z up, pressure)
     return np.array(out)
@@ -97,6 +106,35 @@ def test_normal_incidence_matches_acoustic_chain():
     ref = _acoustic_chain(model, 2 * np.pi * FREQS)
     np.testing.assert_allclose(r.displacement_z, ref[:, 0], rtol=1e-9, atol=1e-12)
     np.testing.assert_allclose(r.pressure, ref[:, 1], rtol=1e-9, atol=1e-9)
+
+
+def test_attenuating_normal_incidence_matches_acoustic_chain():
+    # Independent propagator with complex Kjartansson velocities written out here.
+    qp = np.array([30.0, np.inf, 80.0, np.inf])
+    solid = dataclasses.replace(SOLID, qp=qp, qs=np.array([10.0, 50.0, np.inf, np.inf]))
+    model = OBSModel(solid, WaterLayer(4.0))
+    freqs = FREQS[FREQS > 0]
+    r = seafloor_response(model, 0.0, freqs)
+
+    def velocity(i, w):
+        gamma = np.arctan(1 / qp[i]) / np.pi
+        f = w / (2 * np.pi)
+        return SOLID.vp[i] * np.cos(np.pi * gamma / 2) * f**gamma * np.exp(-0.5j * np.pi * gamma)
+
+    ref = _acoustic_chain(model, 2 * np.pi * freqs, velocity)
+    np.testing.assert_allclose(r.displacement_z, ref[:, 0], rtol=1e-9, atol=1e-12)
+    np.testing.assert_allclose(r.pressure, ref[:, 1], rtol=1e-9, atol=1e-9)
+    elastic = seafloor_response(OBSModel(SOLID, WaterLayer(4.0)), 0.0, freqs)
+    assert np.max(np.abs(r.displacement_z - elastic.displacement_z)) > 0.05  # Q matters
+
+
+def test_elastic_limit_of_attenuating_layers():
+    big = np.full(4, 1e12)
+    model = OBSModel(dataclasses.replace(SOLID, qp=big, qs=big), WaterLayer(2.0))
+    r = seafloor_response(model, 0.06, FREQS)
+    elastic = seafloor_response(OBSModel(SOLID, WaterLayer(2.0)), 0.06, FREQS)
+    # 1/Q = 1e-12 perturbs the velocities by ~1e-12 ln(f): far below the tolerance.
+    np.testing.assert_allclose(r.pressure, elastic.pressure, rtol=1e-8, atol=1e-10)
 
 
 # --- synthetic ACF ----------------------------------------------------------------

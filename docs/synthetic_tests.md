@@ -212,3 +212,39 @@ km/s; the truth (0.60, 1.75, 0.15, 0.60) lies inside all of them.
   n = 5 and 7.2x for n = 8). For real data, run untempered first; turn tempering on when
   `lagging_chains` or R-hat point to separate modes, or from the start when the
   ACF is fitted without compliance, the case that got stuck here.
+
+## 6. Attenuating sediment
+
+`python tools/q_synthetic_test.py` (about 17 min) makes data from the true
+model of the example with sediment Qs = 20 and Qp = 100 (velocities at the
+1 Hz reference; `docs/forward.md`, attenuation) and the example's noise
+realization, and inverts them elastically and with Q fixed at the truth. All
+data groups, the example's sampler. The noise realization is the one of test
+1, which already puts the sediment Vs averages about 6 % above the truth, so
+each run is compared with test 1's CDZP case (elastic data, elastic
+inversion, same noise); ratio of medians in brackets.
+
+| quantity | elastic data, elastic (test 1) | Q data, elastic | Q data, Q fixed |
+|---|---|---|---|
+| basement (km) | 0.591-0.622 | 0.600-0.631 (1.014) | 0.591-0.621 (0.999) |
+| Vp (km/s) | 1.71-1.80 | 1.74-1.83 (1.014) | 1.71-1.80 (0.999) |
+| tp2 (s) | 0.686-0.695 | 0.686-0.696 (1.000) | 0.686-0.696 (1.000) |
+| vs_sqrt_mean (km/s) | 0.374-0.418 | 0.350-0.390 (0.943) | 0.374-0.413 (0.995) |
+| vs_mid (km/s) | 0.382-0.440 | 0.356-0.404 (0.933) | 0.381-0.432 (0.992) |
+
+- **With Q in the model the result is that of the elastic test**: the
+  attenuating forward solvers recover what the elastic ones did, within 1 %.
+- **An elastic inversion returns the sediment Vs of the compliance band.**
+  Its Vs averages are 6-7 % below those at 1 Hz, as expected for Qs = 20:
+  the constant-Q phase velocity at 0.01-0.05 Hz is 0.93-0.95 of that at
+  1 Hz. Compliance carries the Vs information (test 1), so the elastic
+  model's Vs is the Vs at compliance frequencies, not at the ACF's.
+  Basement depth and Vp move by 1.4 %, the ACF's share of the dispersion.
+- **What to do with real data.** If sediment Q is unknown, say so when
+  reporting Vs: an elastic result is Vs at about 0.01 Hz. To compare with Vs
+  at 1 Hz or higher (logs, refraction, geotechnical relations), either fix Q
+  from an independent estimate or apply the correction above. Whether the
+  data constrain Q themselves has not been tested; Qs barely changes the
+  ACF (`docs/forward.md`), so a sampled Qs would mostly trade off with Vs
+  through the dispersion between bands and needs an informative prior.
+- **Cost**: 772 s against 207 s for the elastic run (3.7x).

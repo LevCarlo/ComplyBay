@@ -28,6 +28,13 @@ option that restores the old behavior where one exists.
 
 ### Added
 
+- Constant-Q attenuation (Kjartansson 1979): optional `qp` / `qs` in
+  `LayeredModel` (velocities at `q_reference_frequency`, default 1 Hz) and
+  in segments of `model.yaml` (`qp`, `qs` profiles, fixed or sampled;
+  `Model.q_reference_frequency_hz`). The ACF response uses complex
+  velocities; compliance and phase velocity use the velocities dispersed to
+  each frequency (`complybay.forward.attenuation`). Elastic models give
+  bit-identical results.
 - Per-group misfits in `posterior_mcmc.nc`: `group_chi2`, `group_n`,
   `term_log_likelihood` per kept draw, and a trace every `thin` steps from
   step 0 (`trace_log_posterior`, `trace_group_chi2`,

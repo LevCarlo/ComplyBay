@@ -351,3 +351,38 @@ def test_direct_vp_profile_for_sediment():
     p = parameterization_from_config(config)
     _, vp, _ = p.vector_to_model([0.5, 0.0, 0.2, 1.7]).evaluate_properties(np.array([0.1]))
     assert vp[0] == pytest.approx(1.7)
+
+
+# --- attenuation ------------------------------------------------------------------
+
+
+def test_sampled_sediment_q_reaches_the_layers():
+    config = _config()
+    config["Model"]["q_reference_frequency_hz"] = 2.0
+    sediment = config["Model"]["segments"][0]
+    sediment["qs"] = {"type": "constant", "value": {"parameter": "sed.qs"}}
+    sediment["qp"] = {"type": "constant", "value": 80.0}
+    config["Inversion"]["parameters"].append(
+        {"name": "sed.qs", "initial": 20.0, "prior": {"bounds": [5.0, 200.0]}}
+    )
+    p = parameterization_from_config(config)
+    disc = DiscretizationConfig(
+        layers_per_segment={"sediment": 6, "crust": 8, "mantle": 8}, transition_layers=6
+    )
+    solid = p.vector_to_obs_model([0.5, 0.1, 0.2, 4.0, 25.0], disc).solid
+    assert solid.attenuating and solid.q_reference_frequency == 2.0
+    mid = 0.5 * (solid.tops[:-1] + solid.tops[1:])
+    half = transition_half_support_km(0.1, "sigmoid")
+    inside = mid < 0.5 - half  # above the basement transition
+    below = mid > 0.5 + half
+    np.testing.assert_allclose(solid.qs[:-1][inside], 25.0)
+    np.testing.assert_allclose(solid.qp[:-1][inside], 80.0)
+    assert np.all(np.isinf(solid.qs[:-1][below])) and np.isinf(solid.qs[-1])
+    # Inside the transition 1/Q blends towards the elastic crust: Q grows monotonically.
+    across = ~inside & ~below
+    assert np.all(np.diff(solid.qs[:-1][across]) > 0) and np.all(solid.qs[:-1][across] > 25.0)
+    elastic = parameterization_from_config(_config()).vector_to_obs_model(
+        [0.5, 0.1, 0.2, 4.0], disc
+    )
+    assert elastic.solid.qs is None and not elastic.solid.attenuating
+    np.testing.assert_array_equal(elastic.solid.vs, solid.vs)

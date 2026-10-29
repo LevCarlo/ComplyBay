@@ -5,6 +5,11 @@ km of water the fundamental Rayleigh mode drops steeply at short periods
 (towards the water sound speed), so mode 0 below ~10 s is strongly controlled
 by water depth and the shallowest sediment; that is the physical fundamental
 mode, not a separate branch.
+
+Attenuating models (finite qp/qs): each period uses the elastic model with
+the layers' phase velocities at frequency 1 / period
+(:func:`complybay.forward.attenuation.dispersed`), the first-order physical
+dispersion correction; one disba call per period.
 """
 
 from __future__ import annotations
@@ -14,6 +19,7 @@ from typing import Literal
 import numpy as np
 from disba import DispersionError, PhaseDispersion, PhaseSensitivity
 
+from complybay.forward.attenuation import dispersed
 from complybay.model import OBSModel
 
 Wave = Literal["rayleigh", "love"]
@@ -53,6 +59,14 @@ def phase_velocity(
     periods = np.atleast_1d(np.asarray(periods, dtype=float))
     if np.any(periods <= 0):
         raise ValueError("Periods must be positive.")
+    if model.solid.attenuating:
+        settings = dict(wave=wave, mode=mode, algorithm=algorithm, dc=dc)
+        return np.array(
+            [
+                phase_velocity(model.with_solid(dispersed(model.solid, 1 / t)), [t], **settings)[0]
+                for t in periods
+            ]
+        )
     order = np.argsort(periods)
     solver = PhaseDispersion(*disba_arrays(model), algorithm=algorithm, dc=dc)
     out = np.full(periods.size, np.nan)
@@ -83,6 +97,8 @@ def phase_velocity_kernel(
     """
     if parameter not in _KERNEL_PARAMETERS:
         raise ValueError(f"Unknown parameter {parameter!r}.")
+    if model.solid.attenuating:
+        model = model.with_solid(dispersed(model.solid, 1 / period))
     sens = PhaseSensitivity(*disba_arrays(model), algorithm=algorithm, dc=dc)
     kernel = sens(float(period), mode=mode, wave=wave, parameter=_KERNEL_PARAMETERS[parameter])
     values = np.asarray(kernel.kernel, dtype=float)

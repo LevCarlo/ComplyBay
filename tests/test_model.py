@@ -64,3 +64,19 @@ def test_resampled_preserves_depths_and_values():
     assert solid.tops[-1] == pytest.approx(2.5)
     assert solid.vs[-1] == 3.7
     assert set(solid.vs[:-1]) == {0.3, 2.5}
+
+
+def test_attenuation_fields():
+    base = dict(thickness=[0.5], vp=[1.8, 6.0], vs=[0.3, 3.5], rho=[1.8, 2.7])
+    elastic = LayeredModel(**base)
+    assert not elastic.attenuating and np.all(np.isinf(elastic.q("qs")))
+    model = LayeredModel(**base, qs=[20.0, np.inf])
+    assert model.attenuating and model.q("qp").tolist() == [np.inf, np.inf]
+    assert not LayeredModel(**base, qs=[np.inf, np.inf]).attenuating
+    resampled = model.resampled(0.1)
+    assert resampled.qs.tolist() == [20.0] * 5 + [np.inf] and resampled.qp is None
+    for bad in ([20.0], [0.0, np.inf], [np.nan, 1.0]):
+        with pytest.raises(ValueError, match="qs needs"):
+            LayeredModel(**base, qs=bad)
+    with pytest.raises(ValueError, match="q_reference_frequency"):
+        LayeredModel(**base, qs=[20.0, np.inf], q_reference_frequency=0.0)

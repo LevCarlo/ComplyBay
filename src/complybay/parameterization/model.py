@@ -11,11 +11,16 @@ depths (km below the seafloor). Each segment has
   segment's Vp relation (a sediment needs its own Vp: its Vp stays near
   1.5-2 km/s while Vs grows several-fold, so neither a relation nor a constant
   Vp/Vs describes it);
-- a density relation applied to the segment's Vp.
+- a density relation applied to the segment's Vp;
+- optionally Qp and Qs profiles (constant quality factors of
+  :mod:`complybay.forward.attenuation`; absent = elastic). With Q the model's
+  velocities are phase velocities at ``q_reference_frequency`` (Hz).
 
 Inside a gradational interface every property is blended with the same weight,
 
     v(z) = (1 - S(z)) v_upper(z) + S(z) v_lower(z),
+
+and attenuation as 1/Q (an elastic neighbour contributes 1/Q = 0),
 
 where each neighbour is evaluated with depths clamped to its own segment.
 Conversion to finite layers lives in :mod:`complybay.parameterization.layering`.
@@ -31,6 +36,7 @@ from typing import Protocol
 
 import numpy as np
 
+from complybay.model.layered import Q_REFERENCE_FREQUENCY
 from complybay.parameterization.bspline import evaluate_bspline
 from complybay.parameterization.scaling import ScalingConfig
 from complybay.parameterization.transitions import (
@@ -111,6 +117,8 @@ class Segment:
     name: str | None = None
     scaling: ScalingConfig | None = None  # None: the model-level relations
     vp: Profile | None = None  # Vp directly; with neither vp nor vp_vs, the Vp relation
+    qp: Profile | None = None  # None: elastic
+    qs: Profile | None = None
 
     def __post_init__(self):
         if self.top < 0 or self.bottom <= self.top:
@@ -133,6 +141,20 @@ class Segment:
         else:
             vp = scaling.vp_from_vs(vs)
         return vs, vp, scaling.rho_from_vp(vp)
+
+    def inverse_q(self, z) -> tuple[np.ndarray, np.ndarray]:
+        """(1/Qp, 1/Qs) at depths ``z`` clamped to the segment; 0 where elastic."""
+        z_local = np.clip(np.asarray(z, dtype=float), self.top, self.bottom) - self.top
+        out = []
+        for profile in (self.qp, self.qs):
+            if profile is None:
+                out.append(np.zeros(z_local.shape))
+                continue
+            q = profile.evaluate(z_local, thickness=self.thickness)
+            if np.any(q <= 0):
+                raise ValueError("Q must be positive.")
+            out.append(1.0 / q)
+        return out[0], out[1]
 
 
 @dataclass(frozen=True)
@@ -183,6 +205,7 @@ class ParameterizedModel:
     segments: tuple[Segment, ...]
     interfaces: tuple[Interface, ...] | None = None
     scaling: ScalingConfig = field(default_factory=ScalingConfig)
+    q_reference_frequency: float = Q_REFERENCE_FREQUENCY  # Hz, with attenuation only
 
     def __post_init__(self):
         segments = tuple(self.segments)
@@ -251,6 +274,34 @@ class ParameterizedModel:
             weight = interface.weight(z[mask])
             upper = self._properties(index, z[mask])
             lower = self._properties(index + 1, z[mask])
+            for target, above, below in zip(out, upper, lower, strict=True):
+                target[mask] = (1.0 - weight) * above + weight * below
+        return out
+
+    @property
+    def attenuating(self) -> bool:
+        return any(s.qp is not None or s.qs is not None for s in self.segments)
+
+    def evaluate_inverse_q(self, z) -> tuple[np.ndarray, np.ndarray]:
+        """(1/Qp, 1/Qs) at depths ``z``, blended across transitions like the velocities."""
+        z = np.asarray(z, dtype=float)
+        owner = self.segment_index(z)
+        out = (np.empty(z.shape), np.empty(z.shape))
+        for index, segment in enumerate(self.segments):
+            mask = owner == index
+            if np.any(mask):
+                for target, part in zip(out, segment.inverse_q(z[mask]), strict=True):
+                    target[mask] = part
+        for index, interface in enumerate(self.interfaces):
+            if interface.is_hard:
+                continue
+            top, bottom = interface.support_km
+            mask = (z > top) & (z < bottom)
+            if not np.any(mask):
+                continue
+            weight = interface.weight(z[mask])
+            upper = self.segments[index].inverse_q(z[mask])
+            lower = self.segments[index + 1].inverse_q(z[mask])
             for target, above, below in zip(out, upper, lower, strict=True):
                 target[mask] = (1.0 - weight) * above + weight * below
         return out

@@ -15,6 +15,15 @@ frequency. Time dependence is exp(-i omega t). All waves are taken as
 propagating or decaying; teleseismic slownesses keep every layer except
 possibly a very fast half-space propagating.
 
+Attenuating layers (finite ``qp`` or ``qs``) take the complex Kjartansson
+velocities of :mod:`complybay.forward.attenuation`, which depend on frequency,
+so their eigenvector matrices are built per frequency; elastic layers keep the
+single frequency-independent matrix. The vertical slowness is the principal
+root, whose imaginary part is positive for complex velocities with
+attenuation, so downgoing waves decay with depth. The zero-frequency sample,
+where constant-Q velocities are undefined, is computed with the reference
+velocities; every output is zero there (all carry a factor omega).
+
 Sign conventions of the outputs: ``vertical`` is positive up, ``radial`` is
 positive in the direction of horizontal propagation, ``pressure`` is positive
 in compression. The incident wave has unit displacement amplitude and moves
@@ -27,6 +36,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from complybay.forward.attenuation import complex_velocity
 from complybay.model import OBSModel
 
 
@@ -54,6 +64,28 @@ def _solid_eigenvectors(vp: float, vs: float, rho: float, p: float):
     return np.array(columns, dtype=complex).T, np.array(slowness, dtype=complex)
 
 
+def _solid_eigenvectors_per_frequency(vp, vs, rho: float, p: float):
+    """As :func:`_solid_eigenvectors` for complex velocities ``vp``, ``vs`` (n_f,).
+
+    Returns eigenvectors (n_f, 4, 4) and vertical slownesses (n_f, 4).
+    """
+    mu = rho * vs**2
+    lam = rho * vp**2 - 2 * mu
+    qa = np.sqrt(1.0 / vp**2 - p**2)
+    qb = np.sqrt(1.0 / vs**2 - p**2)
+    columns, slowness = [], []
+    for kind, q in (("P", qa), ("S", qb), ("P", -qa), ("S", -qb)):
+        if kind == "P":
+            ux, uz = p * vp, q * vp
+        else:
+            ux, uz = q * vs, -p * vs
+        txz = mu * (p * uz + q * ux)
+        tzz = lam * (p * ux + q * uz) + 2 * mu * q * uz
+        columns.append(np.stack((ux, uz, txz, tzz), axis=-1))
+        slowness.append(q)
+    return np.stack(columns, axis=-1), np.stack(slowness, axis=-1)
+
+
 def _fluid_eigenvectors(vp: float, rho: float, p: float):
     """Columns (u_z, tau_zz) for downgoing and upgoing P in a fluid."""
     q = _vertical_slowness(vp, p)
@@ -73,6 +105,28 @@ def _propagate(eigvecs, slowness, omega, thickness, state):
     x = (np.linalg.inv(eigvecs) @ state.reshape(m, n * k)).reshape(m, n, k)
     x *= phase[:, :, None]
     return (eigvecs @ x.reshape(m, n * k)).reshape(m, n, k)
+
+
+def _propagate_per_frequency(eigvecs, slowness, omega, thickness, state):
+    """As :func:`_propagate` with eigenvectors (n_f, m, m) and slownesses (n_f, m)."""
+    x = np.linalg.solve(eigvecs, state.transpose(1, 0, 2))  # (n_f, m, k)
+    x *= np.exp(1j * slowness * omega[:, None] * thickness)[:, :, None]
+    return (eigvecs @ x).transpose(1, 0, 2)
+
+
+def _layer_matrices(solid, index: int, ray_p: float, freqs: np.ndarray):
+    """(eigenvectors, slownesses, per_frequency) of solid layer ``index``."""
+    vp, vs, rho = solid.vp[index], solid.vs[index], solid.rho[index]
+    qp, qs = solid.q("qp")[index], solid.q("qs")[index]
+    if np.isinf(qp) and np.isinf(qs):
+        e, q = _solid_eigenvectors(vp, vs, rho, ray_p)
+        return e, q, False
+    f_ref = solid.q_reference_frequency
+    positive = np.where(freqs > 0, freqs, f_ref)  # f = 0: reference velocities
+    cvp = np.where(freqs > 0, complex_velocity(vp, qp, positive, f_ref), vp)
+    cvs = np.where(freqs > 0, complex_velocity(vs, qs, positive, f_ref), vs)
+    e, q = _solid_eigenvectors_per_frequency(cvp, cvs, rho, ray_p)
+    return e, q, True
 
 
 @dataclass(frozen=True)
@@ -113,11 +167,15 @@ def seafloor_response(model: OBSModel, ray_p: float, freqs) -> SeafloorResponse:
     n = freqs.size
     # State layout (vector component, frequency, basis vector).
     basis = np.repeat(np.eye(4, dtype=complex)[:, None, [0, 1, 3]], n, axis=1)
-    for h, vp, vs, rho in zip(solid.thickness, solid.vp, solid.vs, solid.rho, strict=False):
-        e, q = _solid_eigenvectors(vp, vs, rho, ray_p)
-        basis = _propagate(e, q, omega, h, basis)
-    e_hs, _ = _solid_eigenvectors(solid.vp[-1], solid.vs[-1], solid.rho[-1], ray_p)
-    m = (np.linalg.inv(e_hs) @ basis.reshape(4, n * 3)).reshape(4, n, 3).transpose(1, 0, 2)
+    for index, h in enumerate(solid.thickness):
+        e, q, per_frequency = _layer_matrices(solid, index, ray_p, freqs)
+        propagate = _propagate_per_frequency if per_frequency else _propagate
+        basis = propagate(e, q, omega, h, basis)
+    e_hs, _, per_frequency = _layer_matrices(solid, solid.n_layers, ray_p, freqs)
+    if per_frequency:
+        m = np.linalg.solve(e_hs, basis.transpose(1, 0, 2))
+    else:
+        m = (np.linalg.inv(e_hs) @ basis.reshape(4, n * 3)).reshape(4, n, 3).transpose(1, 0, 2)
 
     lhs = np.zeros((n, 3, 3), dtype=complex)
     rhs = np.zeros((n, 3), dtype=complex)
