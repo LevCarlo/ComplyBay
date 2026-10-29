@@ -1,0 +1,69 @@
+# Synthetic test 2 (docs/synthetic_tests.md): two sediment segments, each with
+# a Vs gradient and its own constant Vp, over a crust whose Vs gradient is
+# sampled. The true values are in truth.yaml; the data were made by
+# python tools/make_synthetic_example.py examples/synthetic_layered
+
+Model:
+  zmax_km: 100.0
+  interfaces:
+    - name: sed_boundary
+      depth_km: {parameter: sed_boundary.depth}
+    - name: basement
+      depth_km: {parameter: basement.depth}
+    - name: moho
+      depth_km: 7.0
+  segments:
+    - name: sed_upper
+      vs: {type: gradient, top: {parameter: upper.vs_top}, bottom: {parameter: upper.vs_bottom}}
+      vp: {type: constant, value: {parameter: upper.vp}}
+      scaling: {rho: {method: gardner1974}}
+    - name: sed_lower
+      vs: {type: gradient, top: {parameter: lower.vs_top}, bottom: {parameter: lower.vs_bottom}}
+      vp: {type: constant, value: {parameter: lower.vp}}
+      scaling: {rho: {method: gardner1974}}
+    - name: crust
+      vs: {type: gradient, top: {parameter: crust.vs_top}, bottom: {parameter: crust.vs_bottom}}
+    - name: mantle
+      vs: {type: constant, value: 4.5}
+      scaling:
+        vp: {method: constant_vp_vs, vp_vs: 1.8}
+        rho: {method: constant, rho: 3.35}
+
+Inversion:
+  parameters:
+    - {name: sed_boundary.depth, initial: 0.3, prior: {bounds: [0.05, 0.6]}, proposal: {sigma: 0.02}}
+    - {name: basement.depth, initial: 1.0, prior: {bounds: [0.3, 1.5]}, proposal: {sigma: 0.02}}
+    - {name: upper.vs_top, initial: 0.2, prior: {bounds: [0.05, 0.6]}, proposal: {sigma: 0.02}}
+    - {name: upper.vs_bottom, initial: 0.4, prior: {bounds: [0.1, 1.0]}, proposal: {sigma: 0.03}}
+    - {name: upper.vp, initial: 1.7, prior: {bounds: [1.5, 2.5]}, proposal: {sigma: 0.01}}
+    - {name: lower.vs_top, initial: 0.6, prior: {bounds: [0.1, 1.5]}, proposal: {sigma: 0.03}}
+    - {name: lower.vs_bottom, initial: 1.0, prior: {bounds: [0.2, 2.0]}, proposal: {sigma: 0.03}}
+    - {name: lower.vp, initial: 2.1, prior: {bounds: [1.5, 3.5]}, proposal: {sigma: 0.02}}
+    - {name: crust.vs_top, initial: 3.0, prior: {bounds: [2.5, 3.6]}, proposal: {sigma: 0.05}}
+    - {name: crust.vs_bottom, initial: 3.8, prior: {bounds: [3.4, 4.2]}, proposal: {sigma: 0.05}}
+
+Constraints:
+  - {type: vp_vs_range, bounds: [1.6, 40.0]}
+  - {type: vs_range, bounds: [0.05, 2.0], segments: [sed_upper, sed_lower]}
+  - {type: boundary_non_decreasing_vs}
+  - {type: vp_above_water}
+
+Discretization:
+  layers_per_segment: {sed_upper: 8, sed_lower: 10, crust: 10, mantle: 10}
+
+Sampler:
+  n_steps: 40000
+  burn_in: 12000
+  thin: 10
+  n_chains: 4
+  update: covariance
+  adapt: true
+  global_jump_interval: 20
+  executor: process
+  seed: 2
+
+Output:
+  max_depth_km: 10.0
+  n_depths: 501
+  n_model_samples: 2000
+  n_predictive_samples: 200

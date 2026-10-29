@@ -106,10 +106,11 @@ What this shows:
   the noise-free value (stiffer, so faster), while the inversion layering
   changes compliance by chi2 = 0.0002 and phase velocity by chi2 = 0.0003.
   The tightest quantities are the most exposed to one noise draw; test 3
-  (several noise seeds) checks the coverage.
+  (20 noise seeds) confirms it: their coverage is 18/20, as it should be.
 - **Z puts `tp2` slightly late** (median 0.694 s against 0.686 s for P and
   the truth). Whether this is the noise draw or a systematic difference
-  between the components will show with other noise seeds.
+  between the components will show with other noise seeds (test 3 finds a
+  small late bias of tp2 from all data, +0.002 s).
 - **The truth just outside the `tp2` interval** (Z, CDZ, CDZP; 0.686 s
   against 0.6857-0.6953 for CDZP) is not a discretization bias: the ACF of
   the true model on the inversion layering differs from that on the fine
@@ -124,6 +125,99 @@ What this shows:
   leaving needs basement and Vp to move together. Check the best log
   posterior per chain, and consider parallel tempering or more chains for
   real data. Parallel tempering fixes this case (test 5).
+
+## 2. Two sediment units over a sampled crust
+
+`python tools/data_subset_test.py examples/synthetic_layered runs/layered
+--cases CDZP CZP CD --segments sed_upper sed_lower` (about 15 min). True
+model (`examples/synthetic_layered/truth.yaml`, assumed values): 2 km of
+water; an upper unit 0-0.25 km (Vs 0.12 -> 0.35 km/s, Vp 1.6 km/s) over a
+lower unit to 0.8 km (Vs 0.5 -> 0.9 km/s, Vp 2.0 km/s); crust to 7 km with
+Vs 3.2 -> 3.8 km/s (Vp, rho from Brocher 2005), fixed mantle. 10 model
+parameters (both interface depths, Vs top/bottom and Vp of each unit, crust
+Vs top/bottom) and 4 noise scales; data and noise as in the example (seed 0).
+CDZP was rerun with tempering (5 temperatures to 30; R-hat 1.019, ESS >= 351,
+`runs/layered_pt`) and gave the same intervals within 0.02 km/s; the table
+shows the tempered run for CDZP. 90 % intervals (`*`: truth outside):
+
+| quantity | truth | CDZP | CZP | CD |
+|---|---|---|---|---|
+| sed_boundary depth (km) | 0.25 | 0.219-0.258 | 0.217-0.259 | 0.244-0.585 |
+| basement depth (km) | 0.80 | 0.769-0.824 | 0.765-0.822 | 0.589-1.370 |
+| upper Vp | 1.60 | 1.543-1.636 | 1.536-1.633 | 1.514-2.122 |
+| lower Vp | 2.00 | 1.894-2.048 | 1.883-2.040 | 1.714-3.371 |
+| upper vs_mean | 0.215 | 0.175-0.215 | 0.173-0.312 | 0.212-0.439 |
+| upper vs_sqrt_mean | 0.230 | 0.186-0.247 | 0.184-0.318 | 0.226-0.461 |
+| lower vs_top | 0.50 | 0.532-1.161* | 0.445-1.113 | 0.582-1.457* |
+| lower vs_sqrt_mean | 0.695 | 0.692-0.852 | 0.686-0.848 | 0.660-1.492 |
+| crust Vs top | 3.20 | 3.093-3.350 | 3.060-3.329 | 2.866-3.565 |
+| crust Vs bottom | 3.80 | 3.641-3.919 | 3.666-3.966 | 3.474-4.162 |
+
+R-hat (no tempering): CDZP 1.19, CZP 1.90, CD 1.08 (`upper.vs_top`); CZP
+had one chain in a mode with upper Vs top 0.31 km/s whose log posterior
+overlapped the others' (not a lagging chain, a weakly separated mode).
+
+What this shows:
+
+- **The ACF resolves both sediment units.** The intra-sediment boundary
+  (0.22-0.26 km), the basement (0.77-0.82 km) and both Vp are fixed by the
+  ACF, as tp2 was in test 1; without it (CD) neither depth is.
+- **Sediment Vs: the upper unit's average is resolved, the lower unit's
+  only loosely.** Compliance fixes the upper unit's mean Vs to about +-10 % once
+  the ACF has fixed its thickness; the lower unit's mean Vs is known to about
+  +-10 % on a 0.69-0.85 km/s range, and its gradient not at all (Vs top and
+  bottom trade off; the truth of `lower.vs_top` lies just outside, as the Vs
+  averages of test 1 did with the same noise seed). Each unit's Vs averages
+  are the quantities to report, as in test 1.
+- **Crust Vs is constrained by dispersion and by the ACF together.** Change
+  in chi2 for crust Vs top +0.1 km/s at the truth: dispersion 3.7, ACF Z 5.0
+  and P 3.6, compliance 0.1. The ACF part is crust Vp (Moho and crustal
+  reverberations near 2 s lie inside the 0.3-8 s window) carried to Vs by
+  the Brocher relation, so it holds only as far as that relation does. With
+  dispersion and compliance alone (CD) the crust is barely constrained,
+  because the unresolved sediment absorbs the short-period misfit.
+- **Ten model parameters need longer chains or tempering.** Without
+  tempering the soft upper unit mixed slowly (ESS 29 for its top Vs). With
+  the default ladder the coldest swap was accepted only 7 % of the time
+  (below the 10 % guideline): for 14 parameters use 6-7 temperatures.
+
+## 3. Coverage over noise realizations
+
+`python tools/coverage_test.py examples/synthetic runs/coverage --seeds 20`
+(about 75 min): the example's data regenerated with noise seeds 0-19
+(`tools/make_synthetic_example.py --seed`; seed 0 is the shipped data) and
+inverted with all data groups and the example's sampler. Count of seeds
+whose 90 % interval holds the truth (expected 18 +- 1.3), and the mean offset
+of the median from the truth in units of the 90 % half-width:
+
+| quantity | inside | offset | max R-hat |
+|---|---|---|---|
+| basement depth | 20 / 20 | +0.07 | 1.006 |
+| sed.vs_top | 20 / 20 | +0.24 | 1.126 |
+| sed.vs_bottom | 20 / 20 | -0.20 | 1.110 |
+| sed.vp | 20 / 20 | -0.05 | 1.007 |
+| tp2 | 17 / 20 | +0.44 | - |
+| ts2 | 20 / 20 | -0.33 | - |
+| vs_mean | 20 / 20 | +0.29 | - |
+| vs_sqrt_mean | 18 / 20 | +0.22 | - |
+| vs_mid | 18 / 20 | +0.10 | - |
+
+- **The intervals are calibrated or conservative.** Every quantity's count
+  lies within the binomial spread of 18 or above it. The wide, trading-off
+  parameters (Vs end values, ts2, vs_mean) cover in every realization: their
+  intervals are partly set by the prior bounds and the trade-off. The
+  tightest Vs summaries (`vs_sqrt_mean`, `vs_mid`) cover as they should, so
+  their misses in test 1 were the noise draw. One run of 20 had R-hat 1.13
+  (sed.vs_top).
+- **tp2 comes out slightly late.** The median exceeds the truth by 0.0020 s
+  on average (standard error 0.0007 s over the seeds), 0.3 % of tp2 or 0.44
+  of its half-width. Fitting the noise-free ACF of the fine layering with the
+  inversion layering accounts for 0.0006 s of it (best basement depth
+  0.6005 km instead of 0.6, chi2 0.09 over 310 lags); the rest, about two
+  standard errors, is not explained. Against the tp2 interval width
+  (+-0.0045 s) it is small, but the tp2 coverage (17/20) is the lowest, so
+  treat tp2 intervals as slightly optimistic. Basement depth and Vp
+  themselves show no bias.
 
 ## 4. Correlated ACF errors
 

@@ -28,6 +28,11 @@ option that restores the old behavior where one exists.
 
 ### Added
 
+- Synthetic tests 2 (two sediment units over a sampled crust,
+  `examples/synthetic_layered`) and 3 (coverage over 20 noise seeds,
+  `tools/coverage_test.py`); `tools/make_synthetic_example.py` reads a true
+  model from `truth.yaml` (default output unchanged);
+  `tools/data_subset_test.py --segments`.
 - Constant-Q attenuation (Kjartansson 1979): optional `qp` / `qs` in
   `LayeredModel` (velocities at `q_reference_frequency`, default 1 Hz) and
   in segments of `model.yaml` (`qp`, `qs` profiles, fixed or sampled;

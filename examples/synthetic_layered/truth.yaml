@@ -1,0 +1,14 @@
+# True model of synthetic test 2 (assumed values, typical of a two-unit
+# sediment cover: soft muds over more consolidated sediment).
+parameters:
+  sed_boundary.depth: 0.25
+  basement.depth: 0.8
+  upper.vs_top: 0.12
+  upper.vs_bottom: 0.35
+  upper.vp: 1.6
+  lower.vs_top: 0.5
+  lower.vs_bottom: 0.9
+  lower.vp: 2.0
+  crust.vs_top: 3.2
+  crust.vs_bottom: 3.8
+fine_layers: {sed_upper: 40, sed_lower: 50, crust: 40, mantle: 30}

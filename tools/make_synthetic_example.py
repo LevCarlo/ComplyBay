@@ -14,8 +14,14 @@ between Z and P. Writes ``acf_z_events.dat``, ``acf_p_events.dat`` and
 ``acf_errors.nc`` (used by ``obs_events.yaml``); the other files are unchanged
 (separate random stream).
 
+The true model is :data:`TRUTH` (the parameter values of
+``examples/synthetic/model.yaml``), or ``truth.yaml`` in the directory when
+there is one: ``parameters`` (a value for every model parameter) and
+optionally ``fine_layers`` (layers per segment for the data).
+
     python tools/make_synthetic_example.py examples/synthetic
     python tools/make_synthetic_example.py examples/synthetic --events 60
+    python tools/make_synthetic_example.py examples/synthetic_layered
 """
 
 import argparse
@@ -34,6 +40,18 @@ from complybay.workflow.setup import build_inversion
 
 TRUTH = {"basement.depth": 0.6, "sed.vs_top": 0.15, "sed.vs_bottom": 0.6, "sed.vp": 1.75}
 FINE = DiscretizationConfig(layers_per_segment={"sediment": 60, "crust": 40, "mantle": 30})
+
+
+def truth_of(directory: Path) -> tuple[dict, DiscretizationConfig]:
+    """(true parameter values, layering of the data) for an example directory."""
+    path = Path(directory) / "truth.yaml"
+    if not path.exists():
+        return dict(TRUTH), FINE
+    cfg = load_yaml(path)
+    fine = cfg.get("fine_layers")
+    return dict(cfg["parameters"]), FINE if fine is None else DiscretizationConfig(
+        layers_per_segment=dict(fine)
+    )
 
 
 def event_acfs(model, ray_p, processing, n_events, rng, *, source_duration=3.0, noise=0.0, dt=0.05):
@@ -69,9 +87,10 @@ def main(argv=None):
     args = parser.parse_args(argv)
     setup = build_inversion(load_yaml(args.directory / "model.yaml"))
     p = setup.parameterization
-    model = p.vector_to_model([TRUTH[name] for name in p.names])
+    values, fine = truth_of(args.directory)
+    model = p.vector_to_model([values[name] for name in p.names])
     water = water_from_station(load_yaml(args.directory / "obs.yaml")["Station"])
-    truth = OBSModel(discretize(model, FINE), water)
+    truth = OBSModel(discretize(model, fine), water)
     rng = np.random.default_rng(args.seed)
 
     freqs = np.geomspace(0.004, 0.025, 15)
@@ -102,6 +121,8 @@ def main(argv=None):
             header=f"lag_s acf sigma ({component}, kim2023, ray_p 0.06 s/km, synthetic)",
         )
     if args.events:
+        if not (args.directory / "obs_events.yaml").exists():
+            raise SystemExit("--events needs obs_events.yaml (its ACF window) in the directory.")
         kim = preset("kim2023")
         events = event_acfs(
             truth,
@@ -138,7 +159,7 @@ def main(argv=None):
             },
         )
         print(f"wrote {args.events}-event ACFs (shrinkage {errors.shrinkage:.2f})")
-    print(f"wrote data for {TRUTH} to {args.directory}")
+    print(f"wrote data for {values} to {args.directory}")
 
 
 if __name__ == "__main__":

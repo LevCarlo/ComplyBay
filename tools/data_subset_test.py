@@ -8,6 +8,11 @@ S times, mean Vs) is compared with the prior and the true model.
 
     python tools/data_subset_test.py examples/synthetic runs/data_subsets
     python tools/data_subset_test.py examples/synthetic runs/data_subsets --cases C D CDZP
+    python tools/data_subset_test.py examples/synthetic_layered runs/layered \
+        --cases CDZP CZP CD --segments sed_upper sed_lower
+
+The true model is that of ``tools/make_synthetic_example.py`` for the
+directory (``truth.yaml`` when present).
 
 Writes one run directory per case, ``summary.nc`` (median, 5/95 % quantiles,
 90 % width relative to the prior, R-hat, truth per case and quantity, and the
@@ -21,7 +26,7 @@ from pathlib import Path
 
 import numpy as np
 import xarray as xr
-from make_synthetic_example import TRUTH
+from make_synthetic_example import truth_of
 
 from complybay.inference import derived_quantities
 from complybay.io import dump_yaml, load_yaml
@@ -29,13 +34,13 @@ from complybay.workflow import build_inversion, run_inversion
 
 GROUPS = {"C": "compliance", "D": "dispersion", "Z": "vertical", "P": "pressure"}
 DEFAULT_CASES = ["C", "D", "Z", "P", "ZP", "CD", "CZP", "DZP", "CDZ", "CDP", "CDZP"]
-DERIVED = [
-    "tp2.sediment",
-    "ts2.sediment",
-    "vs_mean.sediment",
-    "vs_sqrt_mean.sediment",
-    "vs_mid.sediment",
-]
+QUANTITIES = ("tp2", "ts2", "vs_mean", "vs_sqrt_mean", "vs_mid")
+DERIVED = [f"{q}.sediment" for q in QUANTITIES]
+
+
+def derived_names(segments) -> list[str]:
+    """Derived quantities reported for ``segments`` (segment names)."""
+    return [f"{q}.{segment}" for segment in segments for q in QUANTITIES]
 
 
 def subset_obs(obs: dict, case: str, base: Path) -> dict:
@@ -69,7 +74,7 @@ def summarize(run_dir: Path, stage: str, names: list[str], parameterization) -> 
     # Derived quantities from every kept sample (the model file holds a subset).
     n_model = len(parameterization.names)
     rows = [derived_quantities(parameterization.vector_to_model(t[:n_model])) for t in theta]
-    derived = {name: np.array([row[name] for row in rows]) for name in DERIVED}
+    derived = {name: np.array([row[name] for row in rows]) for name in names if name in rows[0]}
     out = {}
     for name in names:
         if name in params:
@@ -86,6 +91,7 @@ def main(argv=None):
     parser.add_argument("example", type=Path)
     parser.add_argument("output", type=Path)
     parser.add_argument("--cases", nargs="+", default=DEFAULT_CASES)
+    parser.add_argument("--segments", nargs="+", default=["sediment"], help="derived quantities of")
     args = parser.parse_args(argv)
     for case in args.cases:
         if not case or set(case) - set(GROUPS) or len(set(case)) != len(case):
@@ -109,9 +115,10 @@ def main(argv=None):
 
     p = build_inversion(load_yaml(model_file)).parameterization  # model parameters only
     model_names = list(p.names)
-    truth_model = p.vector_to_model([TRUTH[name] for name in p.names])
-    truth = {**TRUTH, **derived_quantities(truth_model)}
-    names = model_names + DERIVED
+    values, _ = truth_of(args.example)
+    truth_model = p.vector_to_model([values[name] for name in p.names])
+    truth = {**values, **derived_quantities(truth_model)}
+    names = model_names + derived_names(args.segments)
 
     prior = summarize(prior_dir, "prior", names, p)
     cases = ["prior", *args.cases]
