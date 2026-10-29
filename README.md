@@ -39,6 +39,9 @@ The v0.1 scripts (`run_comply_inv`, `run_joint_inv`, example in
 
 ## 🛠 Development
 
+Documentation website: <https://levcarlo.github.io/ComplyBay/> (built from
+`docs/` on every push to `dev`).
+
 - [docs/development.md](docs/development.md): code layout, units, testing and
   reproducibility rules for contributions.
 - [docs/forward.md](docs/forward.md): forward solvers, conventions and how they

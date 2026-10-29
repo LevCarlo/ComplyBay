@@ -1,5 +1,6 @@
 site_name: ComplyBay
 site_description: Forward modelling and Bayesian inversion for ocean-bottom seismology
+site_url: https://levcarlo.github.io/ComplyBay/
 repo_url: https://github.com/LevCarlo/ComplyBay
 repo_name: LevCarlo/ComplyBay
 edit_uri: edit/dev/docs/
