@@ -28,6 +28,10 @@ option that restores the old behavior where one exists.
 
 ### Added
 
+- Documentation website: `mkdocs.yml` (MkDocs Material) over `docs/`, an
+  API reference generated from the docstrings (`docs/api/`, mkdocstrings),
+  and formulas in the pages written in LaTeX (MathJax). Install with the
+  `docs` extra; `mkdocs serve` / `mkdocs build --strict`.
 - Synthetic tests 2 (two sediment units over a sampled crust,
   `examples/synthetic_layered`) and 3 (coverage over 20 noise seeds,
   `tools/coverage_test.py`); `tools/make_synthetic_example.py` reads a true

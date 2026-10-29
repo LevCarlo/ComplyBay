@@ -19,8 +19,8 @@ Figures: `tools/make_data_subsets_notebook.py` writes
 
 90 % interval width divided by the prior's (`*`: truth outside the 90 %
 interval). `tp2`, `ts2`: vertical two-way P and S time through the sediment;
-`vs_mean`: travel-time average sediment Vs, thickness / (ts2 / 2);
-`vs_sqrt_mean`: (thickness average of sqrt(Vs))^2; `vs_mid`: Vs at mid-depth.
+`vs_mean`: travel-time average sediment Vs, $H / (t_{s2}/2)$;
+`vs_sqrt_mean`: $\big(\tfrac{1}{H}\int_0^H \sqrt{V_s}\,dz\big)^2$; `vs_mid`: Vs at mid-depth.
 Derived quantities are computed from all kept samples.
 
 | case | basement | vs_top | vs_bottom | vp | tp2 | ts2 | vs_mean | vs_sqrt_mean | vs_mid | max R-hat |
@@ -187,7 +187,7 @@ What this shows:
 (about 75 min): the example's data regenerated with noise seeds 0-19
 (`tools/make_synthetic_example.py --seed`; seed 0 is the shipped data) and
 inverted with all data groups and the example's sampler. Count of seeds
-whose 90 % interval holds the truth (expected 18 +- 1.3), and the mean offset
+whose 90 % interval holds the truth (expected $18 \pm 1.3$), and the mean offset
 of the median from the truth in units of the 90 % half-width:
 
 | quantity | inside | offset | max R-hat |

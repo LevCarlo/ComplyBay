@@ -81,10 +81,10 @@ Before sampling, `run.log` gets one line per check
 
 | check | level |
 |---|---|
-| compliance frequencies above the infragravity limit sqrt(g tanh(2 pi) / (2 pi H)), where the wavelength equals the water depth (0.028 Hz in 2 km of water): the wave pressure at the seafloor is attenuated by more than cosh(2 pi) = 268 | warning |
+| compliance frequencies above the infragravity limit $\sqrt{g \tanh(2\pi) / (2\pi H)}$, where the wavelength equals the water depth (0.028 Hz in 2 km of water): the wave pressure at the seafloor is attenuated by more than $\cosh 2\pi = 268$ | warning |
 | ACF window beyond the data's last lag | warning |
 | ACF window including the normalizing zero lag (`normalize: zero_lag`): fixed to 1, no information, but counted in N | warning |
-| water multiples (lags m 2 H sqrt(1/vp_w^2 - p^2)) inside the window, and how far a 10 m water-depth error (assumed) shifts them, in s and in degrees at the passband peak | info |
+| water multiples (lags $2mH\sqrt{1/v_{p,w}^2 - p^2}$) inside the window, and how far a 10 m water-depth error (assumed) shifts them, in s and in degrees at the passband peak | info |
 | no water multiple inside the window: the ACF fit does not depend on the water depth | info |
 
 The water-depth sensitivity matters because the multiples are the strongest

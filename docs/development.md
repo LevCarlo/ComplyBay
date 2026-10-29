@@ -125,6 +125,13 @@ inversion layer is rewritten.
 - `docs/forward.md` describes the forward solvers: conventions, options and
   how each was validated. Update it with any solver change.
 - `CHANGELOG.md` records user-visible changes, newest first.
+- The pages under `docs/` are also a website (`mkdocs.yml`, MkDocs Material):
+  `pip install -e ".[docs]"`, then `mkdocs serve` to preview or
+  `mkdocs build --strict` to check links; a new page goes into `nav` in
+  `mkdocs.yml`. The built `site/` is not tracked. Formulas in the pages are
+  LaTeX between `$...$` (inline) or `$$...$$` (display), so a literal `$`
+  needs escaping. `docs/api/` lists the modules rendered from their
+  docstrings; add a new public module there too.
 - Demo notebooks under `examples/` are not tracked (`.gitignore`); anything a
   test or another script depends on belongs in `src/`, `tests/` or `tools/`.
 

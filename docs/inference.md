@@ -23,27 +23,30 @@ stack) are predicted from one seafloor response.
 
 ## Likelihood and noise scales
 
-For data group k with residuals r_i, standard deviations s_i and noise scale
-h_k:
+For data group $k$ with residuals $r_i$, standard deviations $s_i$ and noise
+scale $h_k$:
 
-    log L = sum_k [ -1/2 sum_i (r_i / (h_k s_i))^2 - N_k ln h_k ]
+$$
+\ln L = \sum_k \left[ -\frac{1}{2} \sum_i \left(\frac{r_i}{h_k s_i}\right)^2
+- N_k \ln h_k \right]
+$$
 
 Each observation names a sampled parameter holding `log10 h_k`
-(`noise_parameter`), so a uniform prior on it is uniform in ln h, e.g.
+(`noise_parameter`), so a uniform prior on it is uniform in $\ln h$, e.g.
 
 ```yaml
 - {name: noise.compliance, initial: 0.0, prior: {bounds: [-0.5, 0.5]}}   # h in [0.32, 3.2]
 ```
 
 The default design has four: compliance, dispersion, Z-ACF and P-ACF. The
-`N_k ln h_k` term stops a scale from growing to swallow misfit; at fixed
-residuals the best scale is h_k^2 = chi2_k / N_k. Without a noise parameter
+$N_k \ln h_k$ term stops a scale from growing to swallow misfit; at fixed
+residuals the best scale is $h_k^2 = \chi^2_k / N_k$. Without a noise parameter
 the stated sigma is used as is.
 
 Samples are independent unless an `ErrorCorrelation` covers them (next
 section). A noise scale corrects the overall error level, not a correlation:
-with independent lags fitted to correlated errors, chi2 / N is still about 1
-and h about 1, but the ACF counts as N independent data instead of a handful.
+with independent lags fitted to correlated errors, $\chi^2 / N$ is still about 1
+and $h$ about 1, but the ACF counts as $N$ independent data instead of a handful.
 
 ## Correlated ACF errors
 
@@ -53,47 +56,52 @@ with each other too. How many independent pieces of information a kim2023
 ACF over 0.3-8 s (155 lags) holds, from simulations of the processing
 (`tests/test_acf_errors.py`, scratch Monte Carlo of this work):
 
-| errors from | effective N (trace(R)^2 / sum R^2) |
+| errors from | effective N ($(\operatorname{tr} R)^2 / \sum R_{ij}^2$) |
 |---|---|
 | additive white noise (theory = simulation) | 20 (Z or P) |
 | random source wavelets, stack of synthetic events | 3.5-5 (Z), 4-6 (Z and P together; Z-P correlation ~0.45 at equal lag) |
 
 `JointLikelihood(observations, correlations=(ErrorCorrelation(...),))` takes
-blocks of correlated observations. A block holds the correlation R over the
-fitted samples of its members (concatenated). Because R is close to
-singular, only its leading k eigenvectors are kept (`variance_fraction`,
-default 0.99, assumed), and the block contributes the Gaussian log density of
-y = Q^T z (z: residuals / sigma, Q = V l^-1/2):
+blocks of correlated observations. A block holds the correlation $R$ over the
+fitted samples of its members (concatenated). Because $R$ is close to
+singular, only its leading $k$ eigenvectors $V$ (eigenvalues $\Lambda$) are kept
+(`variance_fraction`, default 0.99, assumed), and the block contributes the
+Gaussian log density of $y = Q^\mathsf{T} z$ ($z$: residuals / sigma,
+$Q = V \Lambda^{-1/2}$):
 
-    log L_block = -1/2 y^T M^-1 y - 1/2 ln det M,   M = Q^T D R D Q
+$$
+\ln L_\mathrm{block} = -\frac{1}{2} y^\mathsf{T} M^{-1} y - \frac{1}{2} \ln\det M,
+\qquad M = Q^\mathsf{T} D R D Q,
+$$
 
-with D the noise scale h of each member on its samples (one h: M = h^2 I,
-i.e. -1/2 |y|^2 / h^2 - k ln h). Keeping all eigenvectors (with or without a
-diagonal "nugget") is wrong in practice: the residual has no variance along
-the discarded directions, so chi2 ~ chi2_k while the h term counts N, and h is
-driven to about sqrt(k / N).
+with $D$ the noise scale $h$ of each member on its samples (one $h$:
+$M = h^2 I$, i.e. $-\frac{1}{2}\lvert y\rvert^2 / h^2 - k \ln h$). Keeping all
+eigenvectors (with or without a diagonal "nugget") is wrong in practice: the
+residual has no variance along the discarded directions, so
+$\chi^2 \sim \chi^2_k$ while the $h$ term counts $N$, and $h$ is driven to
+about $\sqrt{k / N}$.
 
 Calibration (Monte Carlo: stacks of 30 or 100 simulated events with random
 source wavelets and noise, residual = stack minus the mean of 20 000
-events): with 99 % of the variance kept, chi2 / k averaged 1.0-1.1 (k about
+events): with 99 % of the variance kept, $\chi^2 / k$ averaged 1.0-1.1 ($k$ about
 30 of 155) for the event-estimated correlation, the processing theory and the
-true correlation alike; 99.9 % gave 1.0-1.25. With independent lags chi2 / N
-averaged 1.0 but scattered with sd 0.4-0.5 instead of the 0.11 of chi2_N / N,
+true correlation alike; 99.9 % gave 1.0-1.25. With independent lags $\chi^2 / N$
+averaged 1.0 but scattered with sd 0.4-0.5 instead of the 0.11 of $\chi^2_N / N$,
 the signature of correlated errors.
 
 Where the correlation comes from (`complybay.acf.errors`):
 
 - `stack_errors(event_acfs, dt, window, processing=...)`: from the per-event
-  ACFs (preferred). sigma of the linear stack = std / sqrt(n); the sample
+  ACFs (preferred). sigma of the linear stack $= \mathrm{std} / \sqrt{n}$; the sample
   correlation inside the window, joint over components, shrunk towards the
   processing theory with the Schafer & Strimmer (2005) weight (fewer events
   than lags make the raw estimate singular). Written by
   `complybay.io.write_acf_errors` as `acf_errors.nc`.
 - `processing_error_correlation(processing, lags, dt, expected=...)`: theory
   for additive noise that is white after whitening, to first order: raw ACF
-  errors independent per lag, times (1 - sinc(W tau))^2 for whitening over W
-  Hz, convolved with the filter kernel, tapered, plus the zero-lag
-  normalization term -m(tau) e(0) with m the expected ACF. It matches
+  errors independent per lag, times $(1 - \operatorname{sinc}(W\tau))^2$ for
+  whitening over $W$ Hz, convolved with the filter kernel, tapered, plus the
+  zero-lag normalization term $-m(\tau)\, e(0)$ with $m$ the expected ACF. It matches
   simulations of the full processing to the Monte Carlo error (max 0.055 over
   all pairs of 155 lags); without the normalization term it was off by up to
   0.25 at short lags. It does not describe source-generated errors, which are
@@ -104,7 +112,7 @@ In `obs.yaml`: `Observations.acf.error_correlation: none | processing |
 {file: acf_errors.nc}` (`docs/workflow.md`).
 
 A solver exception or a non-finite prediction (for example a dispersion mode
-with no root) gives log L = -inf with the reason.
+with no root) gives $\ln L = -\infty$ with the reason.
 
 ## Posterior target
 
@@ -130,8 +138,8 @@ runs independent random-walk Metropolis chains (adapted from SeisForge
 | `adapt` | tune the sigmas during burn-in only (towards 0.44 / 0.234 acceptance), then freeze; with `"all"` only a common factor adapts |
 | `covariance_start` | `"covariance"` only: step at which the covariance proposal takes over (default `burn_in // 2`) |
 | `global_jump_interval` | every k-th step propose uniformly over the whole box (jumps between separated modes) |
-| `temperature` | accept on d(log prior) + d(log likelihood) / T; T = 1 is the posterior |
-| `temperatures`, `swap_interval` | parallel tempering: a ladder of replicas per chain, starting at T = 1, with state swaps every `swap_interval` steps (below) |
+| `temperature` | accept on $\Delta \ln p + \Delta \ln L / T$; $T = 1$ is the posterior |
+| `temperatures`, `swap_interval` | parallel tempering: a ladder of replicas per chain, starting at $T = 1$, with state swaps every `swap_interval` steps (below) |
 
 ### Covariance proposals (`update="covariance"`)
 
@@ -140,16 +148,17 @@ Adaptive Metropolis (Haario, Saksman & Tamminen 2001) confined to burn-in:
 1. Steps `0 .. covariance_start`: adaptive one-parameter updates (target
    acceptance 0.44), which find the scale of each parameter.
 2. From `covariance_start // 2` to the end of burn-in, the chain's states feed
-   a running mean and covariance C (Welford update).
-3. From `covariance_start`: proposals theta' = theta + L z, L L^T =
-   s^2 C + diag((1e-4 (upper - lower))^2), with s starting at 2.38 / sqrt(d)
-   (Gelman, Roberts & Gilks 1996) and tuned by Robbins-Monro towards 0.234.
-   The diagonal floor (assumed) keeps C positive definite.
-4. At the end of burn-in L is frozen: the stored samples are an ordinary
+   a running mean and covariance $C$ (Welford update).
+3. From `covariance_start`: proposals $\theta' = \theta + L z$ with
+   $L L^\mathsf{T} = s^2 C + \operatorname{diag}\big((10^{-4}(\mathrm{upper} - \mathrm{lower}))^2\big)$,
+   $s$ starting at $2.38 / \sqrt{d}$ (Gelman, Roberts & Gilks 1996) and tuned
+   by Robbins-Monro towards 0.234. The diagonal floor (assumed) keeps $C$
+   positive definite.
+4. At the end of burn-in $L$ is frozen: the stored samples are an ordinary
    random-walk Metropolis chain, saved with `proposal_covariance` in
    `<stage>_mcmc.nc`.
 
-Each chain learns its own C, so a chain that is still in a wrong mode at the
+Each chain learns its own $C$, so a chain that is still in a wrong mode at the
 end of burn-in keeps a covariance of that mode; the global jumps (one
 parameter, as for `"one"`) and R-hat across chains still matter. Burn-in must
 be long enough for step 1 to reach the main mode and for step 2 to see the
@@ -166,28 +175,31 @@ with the data, and leaving such a mode needs several parameters (basement
 depth and Vp) to move together, which neither one-parameter global jumps nor a
 covariance learned inside the wrong mode provide (`docs/synthetic_tests.md`,
 test 1, CZP). With `temperatures = (1, T_2, ..., T_max)` every chain becomes
-a ladder of replicas stepped together in one process; replica i samples
-prior x likelihood^(1/T_i). Every `swap_interval` steps adjacent replicas
+a ladder of replicas stepped together in one process; replica $i$ samples
+$p(\theta)\, L(\theta)^{1/T_i}$. Every `swap_interval` steps adjacent replicas
 exchange their states (even pairs and odd pairs in turn) with
 
-    log alpha = (1/T_i - 1/T_{i+1}) (L_{i+1} - L_i)
+$$
+\ln \alpha = \left(\frac{1}{T_i} - \frac{1}{T_{i+1}}\right)
+\left(\ln L_{i+1} - \ln L_i\right)
+$$
 
-(L the log likelihood; Geyer 1991, Earl & Deem 2005). The product of the
-tempered targets is invariant, so the T = 1 replica, the only one stored,
+($L$ the likelihood; Geyer 1991, Earl & Deem 2005). The product of the
+tempered targets is invariant, so the $T = 1$ replica, the only one stored,
 samples the posterior; the hot replicas cross between modes and pass them
 down. Each replica keeps and adapts its own proposal (one-parameter sigmas or
 the AM covariance); the proposals of all replicas freeze at the end of
-burn-in. Cost: one target evaluation per replica and step, so a ladder of n
-costs n times a plain run. Without `temperatures` a chain draws exactly the
+burn-in. Cost: one target evaluation per replica and step, so a ladder of $n$
+costs $n$ times a plain run. Without `temperatures` a chain draws exactly the
 random numbers it drew before (checked bit for bit on the change).
 
-`geometric_temperatures(n, T_max)` gives T_i = T_max^(i/(n-1)). Swaps are
+`geometric_temperatures(n, T_max)` gives $T_i = T_\mathrm{max}^{\,i/(n-1)}$. Swaps are
 accepted when the log-likelihood distributions of neighbours overlap; their
-spread grows like sqrt(d/2) T for d parameters, so adjacent ratios of 2-3
+spread grows like $\sqrt{d/2}\,T$ for $d$ parameters, so adjacent ratios of 2-3
 suit 5-10 parameters (assumed; the swap acceptance per pair is logged and
-stored, and values below about 0.1 call for more temperatures). T_max must
+stored, and values below about 0.1 call for more temperatures). $T_\mathrm{max}$ must
 flatten the barrier between modes: the hottest replica sees the barrier in
-log L divided by T_max. Workflow default `tempering: {}`: 5 temperatures up
+$\ln L$ divided by $T_\mathrm{max}$. Workflow default `tempering: {}`: 5 temperatures up
 to 30 (assumed).
 
 Test (independent check, exact answer): two modes with weights 0.3 and 0.7
@@ -198,7 +210,7 @@ give the weight 0.7 within 0.06 and the within-mode spread within 10 %.
 ### Per-group values
 
 A target with `detail_names` and `log_prior_likelihood_and_details(theta)`
-(`PosteriorTarget`: chi2 per observation and log L per likelihood term)
+(`PosteriorTarget`: $\chi^2$ per observation and $\ln L$ per likelihood term)
 hands the sampler extra values that travel with each state, through
 acceptances and tempering swaps; they are stored for the kept draws
 (`ChainResult.details`) and every `thin` steps from step 0
@@ -232,7 +244,7 @@ First trial on the synthetic test model (9 parameters, noise-free data,
 converged. Their medians and best log posteriors differed, basement depth,
 transition width and sediment Vs trade off along a narrow ridge, and all noise
 scales went to their lower bound because noise-free data are best fitted with
-h -> 0. Synthetic tests need noise added, longer chains, and a convergence
+$h \to 0$. Synthetic tests need noise added, longer chains, and a convergence
 check (R-hat, effective sample size) before results are read.
 
 The demo `examples/inversion_demo.ipynb` (noisy synthetic data from a finer

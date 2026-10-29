@@ -24,6 +24,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff", "meson-python>=0.16", "meson", "ninja"]
+docs = ["mkdocs>=1.6", "mkdocs-material>=9.5", "mkdocstrings[python]>=0.26"]
 
 [project.scripts]
 complybay = "complybay.cli:main"

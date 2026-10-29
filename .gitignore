@@ -17,3 +17,6 @@ runs/
 **/*.png
 
 .DS_Store
+
+# documentation site (mkdocs build)
+site/

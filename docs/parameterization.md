@@ -64,7 +64,7 @@ when the parameterization is built.
   segment top and bottom), `bspline` (open-clamped on the segment's normalized
   coordinate; first/last coefficients are the end values). Profiles stretch
   with the interfaces.
-- Vp: the segment's own `vp` profile, or `vs * vp_vs`, or otherwise the
+- Vp: the segment's own `vp` profile, or $V_s \cdot (V_p/V_s)$ from `vp_vs`, or otherwise the
   segment's Vp relation. Give the sediment its own `vp` profile (constant by
   default): marine sediment Vp stays near 1.5-2 km/s while Vs grows several
   times, so a constant Vp/Vs with a Vs gradient puts Vp below the water
@@ -85,8 +85,8 @@ when the parameterization is built.
   sed.qs}}` with a uniform prior on Q). The velocities of an attenuating
   model are those at `Model.q_reference_frequency_hz` (default 1 Hz,
   assumed), and so are the derived `ts2`, `tp2` and Vs averages. Layers take
-  Q at their midpoints; inside a gradational interface 1/Q is blended like
-  the velocities, an elastic neighbour counting as 1/Q = 0.
+  Q at their midpoints; inside a gradational interface $1/Q$ is blended like
+  the velocities, an elastic neighbour counting as $1/Q = 0$.
 
 ## Interfaces
 
@@ -94,18 +94,18 @@ A gradational interface blends Vs, Vp and rho of the two neighbours with the
 same weight (`sigmoid` or `smootherstep`, compact support). Supports may not
 reach the seafloor, overlap a neighbouring interface or pass `zmax_km`; such
 parameter values raise `ValueError` when the model is built, which the prior
-will turn into log prior = -inf. A `half_normal` width prior makes a hard
+will turn into $\ln p = -\infty$. A `half_normal` width prior makes a hard
 interface the default.
 
 ## Prior and constraints
 
 `GeophysicalPrior(parameterization, discretization, constraints)` returns
-log prior = -inf, with a reason, when
+$\ln p = -\infty$, with a reason, when
 
 1. a parameter is outside its bounds (`parameter_prior`),
 2. the vector does not give a valid model (`model_mapping`): interfaces out of
    order, overlapping transition supports, a relation outside its range, or
-   Vp <= sqrt(4/3) Vs in some layer,
+   $V_p \le \sqrt{4/3}\, V_s$ in some layer,
 3. a hard constraint fails (`physical_constraints: <names>`).
 
 It never raises, and a valid evaluation keeps the built `OBSModel` for the
