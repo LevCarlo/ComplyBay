@@ -71,6 +71,7 @@ from complybay.inference import (
     DispersionObservation,
     ErrorCorrelation,
     Observation,
+    geometric_temperatures,
 )
 from complybay.inference.likelihood import DEFAULT_VARIANCE_FRACTION
 from complybay.io import read_acf_errors, read_three_columns
@@ -121,6 +122,7 @@ class SamplerSettings:
     covariance_start: int | None = None  # update: covariance; default burn_in // 2
     global_jump_interval: int | None = 20
     temperature: float = 1.0
+    tempering: Mapping | None = None  # parallel tempering, see tempering_ladder
     executor: str = "process"
     max_workers: int | None = None
     seed: int | None = None
@@ -135,6 +137,31 @@ class SamplerSettings:
             raise ValueError("Sampler.initial must be 'prior' or 'theta0'.")
         if self.executor not in ("serial", "thread", "process"):
             raise ValueError("Sampler.executor must be serial, thread or process.")
+        _ = self.tempering_ladder  # validates Sampler.tempering
+
+    @property
+    def tempering_ladder(self) -> tuple[tuple[float, ...] | None, int]:
+        """(temperatures, swap_interval) from ``Sampler.tempering``.
+
+        ``tempering: {n_temperatures: 5, max_temperature: 30, swap_interval: 1}``
+        (a geometric ladder; the values shown are the defaults, assumed) or
+        ``{temperatures: [1, 2, 5, ...]}``.
+        """
+        if self.tempering is None:
+            return None, 1
+        t = dict(self.tempering)
+        check_keys(
+            t, {"n_temperatures", "max_temperature", "temperatures", "swap_interval"}, "tempering"
+        )
+        if "temperatures" in t:
+            if {"n_temperatures", "max_temperature"} & set(t):
+                raise ValueError("Sampler.tempering: give temperatures or a geometric ladder.")
+            ladder = tuple(float(v) for v in t["temperatures"])
+        else:
+            ladder = geometric_temperatures(
+                int(t.get("n_temperatures", 5)), float(t.get("max_temperature", 30.0))
+            )
+        return ladder, int(t.get("swap_interval", 1))
 
 
 def sampler_from_config(config: Mapping | None) -> SamplerSettings:

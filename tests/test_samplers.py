@@ -9,6 +9,8 @@ from complybay.inference import (
     LogProbTarget,
     MetropolisConfig,
     PosteriorTarget,
+    geometric_temperatures,
+    lagging_chains,
     run_chain,
     run_metropolis,
 )
@@ -224,3 +226,63 @@ def test_covariance_configuration_errors():
         )
     with pytest.raises(ValueError, match="'covariance' only"):
         MetropolisConfig(100, 1.0, BOX, burn_in=50, covariance_start=10)
+
+
+# --- parallel tempering and lagging chains ------------------------------------------
+
+
+@dataclass(frozen=True)
+class DiagonalModes:
+    """Flat prior; two modes (weights 0.3, 0.7) that differ in both parameters at once."""
+
+    def log_prior_and_likelihood(self, theta):
+        low = -0.5 * np.sum(((theta + 3) / 0.2) ** 2) + np.log(0.3)
+        high = -0.5 * np.sum(((theta - 3) / 0.2) ** 2) + np.log(0.7)
+        return 0.0, float(np.logaddexp(low, high))
+
+
+def test_parallel_tempering_recovers_the_mode_weights():
+    # Independent check: the exact mode weights. Leaving a mode needs both parameters
+    # to move together, so one-parameter global jumps fail (as for basement and Vp).
+    box = (np.full(2, -6.0), np.full(2, 6.0))
+    common = dict(burn_in=4000, adapt=True, update="covariance", global_jump_interval=20)
+    starts = np.full((4, 2), -3.0)
+    plain = run_metropolis(
+        DiagonalModes(), starts, MetropolisConfig(20000, 0.2, box, **common), seed=11
+    )
+    assert np.all(plain.samples[..., 0] < 0)
+    ladder = geometric_temperatures(7, 300.0)  # hottest: barrier of 225 in log L down to < 1
+    config = MetropolisConfig(20000, 0.2, box, temperatures=ladder, **common)
+    tempered = run_metropolis(DiagonalModes(), starts, config, seed=11)
+    high = tempered.samples[..., 0] > 0
+    # 4 x 1600 draws with a few hundred mode switches: standard error of the weight ~0.02.
+    assert np.mean(high) == pytest.approx(0.7, abs=0.06)
+    np.testing.assert_allclose(tempered.samples[high].std(axis=0), 0.2, rtol=0.1)
+    for chain in tempered.chains:
+        assert chain.temperature == 1.0 and chain.swap_acceptance.shape == (6,)
+        assert np.all(chain.swap_acceptance > 0.3)
+    assert plain.chains[0].swap_acceptance is None
+
+
+def test_tempering_configuration():
+    np.testing.assert_allclose(geometric_temperatures(3, 9.0), [1.0, 3.0, 9.0])
+    assert MetropolisConfig(100, 1.0, BOX).ladder == (1.0,)
+    assert MetropolisConfig(100, 1.0, BOX, temperatures=[1, 2.0]).ladder == (1.0, 2.0)
+    for ladder in ([2.0, 4.0], [1.0, 1.0], [1.0]):
+        with pytest.raises(ValueError, match="increase from 1"):
+            MetropolisConfig(100, 1.0, BOX, temperatures=ladder)
+    with pytest.raises(ValueError, match="not both"):
+        MetropolisConfig(100, 1.0, BOX, temperatures=[1.0, 2.0], temperature=2.0)
+    with pytest.raises(ValueError, match="swap_interval"):
+        MetropolisConfig(100, 1.0, BOX, temperatures=[1.0, 2.0], swap_interval=0)
+    with pytest.raises(ValueError, match="n_temperatures"):
+        geometric_temperatures(1, 10.0)
+
+
+def test_lagging_chains_flags_a_chain_stuck_in_a_lower_mode():
+    rng = np.random.default_rng(12)
+    lp = -150 + 2 * rng.standard_normal((4, 500))  # 8 parameters: spread ~ sqrt(8 / 2)
+    assert lagging_chains(lp) == ()
+    lp[2] -= 380  # the CZP case of docs/synthetic_tests.md
+    lp[3] -= 3  # shifted, but overlapping: not flagged
+    assert lagging_chains(lp) == (2,)

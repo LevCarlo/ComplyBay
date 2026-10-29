@@ -78,6 +78,7 @@ class InversionSetup:
 
     def metropolis_config(self) -> MetropolisConfig:
         s = self.sampler
+        temperatures, swap_interval = s.tempering_ladder
         return MetropolisConfig(
             n_steps=s.n_steps,
             proposal_sigma=self.parameterization.proposal_sigmas(),
@@ -89,6 +90,8 @@ class InversionSetup:
             adapt=s.adapt,
             covariance_start=s.covariance_start,
             temperature=s.temperature,
+            temperatures=temperatures,
+            swap_interval=swap_interval,
         )
 
     def initial_thetas(self) -> np.ndarray:

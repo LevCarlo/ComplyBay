@@ -23,7 +23,11 @@ import numpy as np
 
 import complybay
 from complybay.inference import predict
-from complybay.inference.diagnostics import effective_sample_size, split_rhat
+from complybay.inference.diagnostics import (
+    effective_sample_size,
+    lagging_chains,
+    split_rhat,
+)
 from complybay.inference.ensemble import model_ensemble
 from complybay.io import dump_yaml, load_yaml
 from complybay.io.netcdf import mcmc_dataset, model_dataset, predictive_dataset, write_netcdf
@@ -103,11 +107,31 @@ def _write_stage(stage, setup, result, out, attrs, logger, files):
     for i, name in enumerate(setup.names):
         q5, q50, q95 = np.percentile(flat[:, i], [5, 50, 95])
         logger.info("%-24s %10.4g %10.4g %10.4g %7.3f %8.0f", name, q50, q5, q95, rhat[i], ess[i])
+    ladder = result.config.ladder
+    if len(ladder) > 1:
+        logger.info("%s: tempering ladder %s", stage, " ".join(f"{t:.3g}" for t in ladder))
+        for chain in result.chains:
+            logger.info(
+                "chain %d swap acceptance %s", chain.chain_id, np.round(chain.swap_acceptance, 2)
+            )
     worst = int(np.argmax(rhat))
     if rhat[worst] > 1.1:
         logger.warning(
             "not converged: R-hat %.2f for %s; run longer chains", rhat[worst], setup.names[worst]
         )
+    lp = result.log_posterior
+    lagging = lagging_chains(lp)
+    best = int(np.argmax(np.median(lp, axis=1)))
+    for c in lagging:
+        logger.warning(
+            "chain %d is stuck below the others: log posterior median %.1f against %.1f "
+            "(chain %d); it is kept in the outputs. Use Sampler.tempering or more chains",
+            c,
+            np.median(lp[c]),
+            np.median(lp[best]),
+            best,
+        )
+    attrs = attrs | {"lagging_chains": list(lagging)}
 
     files[f"{stage}_mcmc"] = out / f"{stage}_mcmc.nc"
     write_netcdf(

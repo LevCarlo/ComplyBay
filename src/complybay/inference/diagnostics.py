@@ -11,6 +11,13 @@
   initial positive sequence (Vehtari et al., 2021, Bayesian Analysis 16,
   667-718, without rank normalization): how many independent draws the
   correlated chains are worth.
+- Lagging chains: a chain whose log posterior stays below that of the best
+  chain (the one with the highest median) without overlap, i.e. its 95th
+  percentile below the best chain's 5th percentile (assumed percentiles). In
+  a converged run every chain samples the same log-posterior distribution, so
+  such a chain is stuck in a lower mode; R-hat flags the run but not which
+  chain is at fault. The chain is reported, never dropped: deciding that a
+  mode carries no posterior mass needs tempering or many more chains.
 """
 
 from __future__ import annotations
@@ -81,3 +88,13 @@ def split_rhat(samples) -> np.ndarray | float:
 def effective_sample_size(samples) -> np.ndarray | float:
     """Multi-chain effective sample size per parameter."""
     return _per_parameter(samples, _ess)
+
+
+def lagging_chains(log_posterior) -> tuple[int, ...]:
+    """Chains (n_chains, n_draws) whose log posterior lies wholly below the best chain's."""
+    lp = np.asarray(log_posterior, dtype=float)
+    if lp.ndim != 2 or lp.shape[1] < 2:
+        raise ValueError("log_posterior must have shape (chains, draws) with draws >= 2.")
+    best = int(np.argmax(np.median(lp, axis=1)))
+    floor = np.percentile(lp[best], 5)
+    return tuple(int(c) for c in np.nonzero(np.percentile(lp, 95, axis=1) < floor)[0])

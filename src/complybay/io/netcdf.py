@@ -55,6 +55,12 @@ def mcmc_dataset(result, *, rhat, ess, attrs: Mapping | None = None) -> xr.Datas
             ("chain", "parameter", "parameter_2"),
             np.stack([c.proposal_covariance for c in result.chains]),
         )
+    ladder = result.config.ladder
+    if len(ladder) > 1:
+        extra["swap_acceptance"] = (
+            ("chain", "temperature_pair"),
+            np.stack([c.swap_acceptance for c in result.chains]),
+        )
     return xr.Dataset(
         data_vars={
             "theta": (("chain", "draw", "parameter"), result.samples),
@@ -81,7 +87,8 @@ def mcmc_dataset(result, *, rhat, ess, attrs: Mapping | None = None) -> xr.Datas
             "chain": np.arange(result.samples.shape[0]),
             "draw": np.arange(result.samples.shape[1]),
             "parameter": names,
-            **({"parameter_2": names} if extra else {}),
+            **({"parameter_2": names} if "proposal_covariance" in extra else {}),
+            **({"temperature_pair": np.arange(len(ladder) - 1)} if len(ladder) > 1 else {}),
             "step": np.arange(result.chains[0].accepted.size),
         },
         attrs=_attrs(
@@ -97,6 +104,8 @@ def mcmc_dataset(result, *, rhat, ess, attrs: Mapping | None = None) -> xr.Datas
                     else None
                 ),
                 "temperature": result.config.temperature,
+                "temperatures": list(ladder) if len(ladder) > 1 else None,
+                "swap_interval": result.config.swap_interval if len(ladder) > 1 else None,
                 "global_jump_interval": result.config.global_jump_interval,
             }
         ),

@@ -216,6 +216,36 @@ def test_run_writes_the_documented_outputs(tmp_path):
     assert result.files["posterior_predictive"].exists()
 
 
+def test_tempered_run_records_the_ladder(tmp_path):
+    model = _quick_model(tmp_path, tempering={"n_temperatures": 3, "max_temperature": 9.0})
+    out = tmp_path / "pt"
+    run_inversion(model, None, out, prior_only=True)
+    mcmc = xr.open_dataset(out / "prior_mcmc.nc", engine="h5netcdf")
+    assert mcmc["swap_acceptance"].shape == (2, 2)
+    assert mcmc.attrs["temperatures"] == "1.0, 3.0, 9.0" and mcmc.attrs["swap_interval"] == 1
+    assert "tempering ladder 1 3 9" in (out / "run.log").read_text()
+
+
+def test_tempering_settings():
+    setup = build_inversion(load_yaml(EXAMPLE / "model.yaml"))
+    assert setup.metropolis_config().ladder == (1.0,)
+    cfg = load_yaml(EXAMPLE / "model.yaml")
+    cfg["Sampler"]["tempering"] = {}
+    ladder = build_inversion(cfg).metropolis_config().ladder
+    assert len(ladder) == 5 and ladder[-1] == pytest.approx(30.0)
+    cfg["Sampler"]["tempering"] = {"temperatures": [1, 4], "swap_interval": 2}
+    config = build_inversion(cfg).metropolis_config()
+    assert config.ladder == (1.0, 4.0) and config.swap_interval == 2
+    for bad, match in [
+        ({"temperatures": [1, 4], "n_temperatures": 3}, "geometric"),
+        ({"n_temperature": 3}, "unknown keys"),
+        ({"max_temperature": 0.5}, "max_temperature"),
+    ]:
+        cfg["Sampler"]["tempering"] = bad
+        with pytest.raises(ValueError, match=match):
+            build_inversion(cfg)
+
+
 def test_run_refuses_existing_output_and_prior_only_needs_no_data(tmp_path):
     model = _quick_model(tmp_path)
     out = tmp_path / "prior"

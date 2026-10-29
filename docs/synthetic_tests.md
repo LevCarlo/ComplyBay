@@ -123,7 +123,7 @@ What this shows:
   agree with CDZP. Global jumps of one parameter did not get it out, because
   leaving needs basement and Vp to move together. Check the best log
   posterior per chain, and consider parallel tempering or more chains for
-  real data.
+  real data. Parallel tempering fixes this case (test 5).
 
 ## 4. Correlated ACF errors
 
@@ -184,3 +184,31 @@ What this shows:
 - **Convergence.** ZP independent (R-hat 3.05) and ZP events (1.40) did not
   converge in 30000 steps: without compliance the sediment Vs is weakly fixed
   and chains stay in separate modes, as in test 1's CZP case.
+
+## 5. Parallel tempering on the stuck case
+
+The CZP case of test 1 rerun with `Sampler.tempering` (same seed, so the same
+starting points, including the one that got stuck), on the code of the
+tempering change. Log posterior per chain: median (best).
+
+| run | chain 0 | chain 1 | chain 2 | chain 3 | max R-hat | ESS basement / vp | swap acceptance | sampling time |
+|---|---|---|---|---|---|---|---|---|
+| no tempering (test 1) | -159.8 (-156.7) | -540.9 (-537.0) | -159.8 (-156.9) | -160.0 (-156.8) | 12.5 | - | - | 147 s |
+| 5 temperatures, T_max 30 | -159.8 (-156.8) | -159.9 (-156.8) | -159.9 (-156.5) | -160.0 (-156.8) | 1.001 | 3346 / 3351 | 0.24-0.36 | 724 s |
+| 8 temperatures, T_max 100 | -159.9 (-156.7) | -159.9 (-156.5) | -159.8 (-156.7) | -160.0 (-156.9) | 1.002 | 3560 / 3685 | 0.37-0.62 | 1065 s |
+
+90 % intervals with tempering (both ladders agree within 0.001): basement
+0.591-0.622 km, Vp 1.71-1.80 km/s, vs_top 0.06-0.33, vs_bottom 0.46-0.81
+km/s; the truth (0.60, 1.75, 0.15, 0.60) lies inside all of them.
+
+- **The stuck chain is pulled out.** All four chains now reach the same log
+  posterior; `lagging_chains` flags chain 1 of the untempered run and none of
+  the tempered ones.
+- **5 temperatures up to 30 suffice here**, the workflow default. The larger
+  ladder accepts more swaps but gives the same posterior at 1.5x the cost.
+  Swap acceptance well above 0.1 on every pair means the ladder could be
+  coarser; acceptance near 0 on a pair means a temperature is missing there.
+- **Cost.** A ladder of n costs about n times a plain run (here 4.9x for
+  n = 5 and 7.2x for n = 8). For real data, run untempered first; turn tempering on when
+  `lagging_chains` or R-hat point to separate modes, or from the start when the
+  ACF is fitted without compliance, the case that got stuck here.

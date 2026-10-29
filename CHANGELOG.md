@@ -28,6 +28,13 @@ option that restores the old behavior where one exists.
 
 ### Added
 
+- Parallel tempering: `MetropolisConfig(temperatures=..., swap_interval=...)`,
+  `geometric_temperatures`; in `model.yaml` `Sampler.tempering`. Each chain
+  becomes a ladder of replicas with state swaps; only T = 1 is stored, with
+  `swap_acceptance` in `<stage>_mcmc.nc`. Runs without tempering give
+  bit-identical samples.
+- `lagging_chains`: flags chains stuck below the others in log posterior;
+  the driver warns per chain and records them in the output attributes.
 - `complybay.model`: `WaterLayer`, `LayeredModel`, `OBSModel`, one model
   (km, km/s, g/cm^3, depth from the seafloor) shared by all solvers.
 - `complybay.forward`:

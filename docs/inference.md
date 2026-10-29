@@ -130,7 +130,8 @@ runs independent random-walk Metropolis chains (adapted from SeisForge
 | `adapt` | tune the sigmas during burn-in only (towards 0.44 / 0.234 acceptance), then freeze; with `"all"` only a common factor adapts |
 | `covariance_start` | `"covariance"` only: step at which the covariance proposal takes over (default `burn_in // 2`) |
 | `global_jump_interval` | every k-th step propose uniformly over the whole box (jumps between separated modes) |
-| `temperature` | accept on d(log prior) + d(log likelihood) / T; T = 1 is the posterior. The hook for parallel tempering |
+| `temperature` | accept on d(log prior) + d(log likelihood) / T; T = 1 is the posterior |
+| `temperatures`, `swap_interval` | parallel tempering: a ladder of replicas per chain, starting at T = 1, with state swaps every `swap_interval` steps (below) |
 
 ### Covariance proposals (`update="covariance"`)
 
@@ -157,6 +158,57 @@ ridge: a few thousand steps for about ten parameters.
 On a 2-D Gaussian with correlation 0.99 (test suite) the effective sample size
 of 2000 kept draws is about 24 with `"one"`, 120 with `"all"` and 2700 with
 `"covariance"`.
+
+### Parallel tempering (`temperatures`)
+
+The ACF makes the posterior multimodal: a different reverberation can line up
+with the data, and leaving such a mode needs several parameters (basement
+depth and Vp) to move together, which neither one-parameter global jumps nor a
+covariance learned inside the wrong mode provide (`docs/synthetic_tests.md`,
+test 1, CZP). With `temperatures = (1, T_2, ..., T_max)` every chain becomes
+a ladder of replicas stepped together in one process; replica i samples
+prior x likelihood^(1/T_i). Every `swap_interval` steps adjacent replicas
+exchange their states (even pairs and odd pairs in turn) with
+
+    log alpha = (1/T_i - 1/T_{i+1}) (L_{i+1} - L_i)
+
+(L the log likelihood; Geyer 1991, Earl & Deem 2005). The product of the
+tempered targets is invariant, so the T = 1 replica, the only one stored,
+samples the posterior; the hot replicas cross between modes and pass them
+down. Each replica keeps and adapts its own proposal (one-parameter sigmas or
+the AM covariance); the proposals of all replicas freeze at the end of
+burn-in. Cost: one target evaluation per replica and step, so a ladder of n
+costs n times a plain run. Without `temperatures` a chain draws exactly the
+random numbers it drew before (checked bit for bit on the change).
+
+`geometric_temperatures(n, T_max)` gives T_i = T_max^(i/(n-1)). Swaps are
+accepted when the log-likelihood distributions of neighbours overlap; their
+spread grows like sqrt(d/2) T for d parameters, so adjacent ratios of 2-3
+suit 5-10 parameters (assumed; the swap acceptance per pair is logged and
+stored, and values below about 0.1 call for more temperatures). T_max must
+flatten the barrier between modes: the hottest replica sees the barrier in
+log L divided by T_max. Workflow default `tempering: {}`: 5 temperatures up
+to 30 (assumed).
+
+Test (independent check, exact answer): two modes with weights 0.3 and 0.7
+that differ in both parameters at once. Plain AM with global jumps never
+leaves the starting mode; with 7 temperatures up to 300 the stored samples
+give the weight 0.7 within 0.06 and the within-mode spread within 10 %.
+
+### Lagging chains
+
+`lagging_chains(log_posterior)` flags chains whose log posterior lies wholly
+below the best chain's (95th percentile below the best chain's 5th, assumed
+percentiles). In a converged run every chain samples the same log-posterior
+distribution; a flagged chain sits in a lower mode. R-hat shows that a run
+has not converged but not why: chains that mix slowly along a flat direction
+(sediment Vs from the ACF alone, R-hat up to 3) have overlapping log
+posteriors and are not flagged, while the stuck CZP chain (median log
+posterior -541 against -160) is. The driver logs a warning per flagged chain
+and stores `lagging_chains` in the output attributes; the chain stays in the
+outputs, because deciding that its mode carries no mass is not the
+sampler's call. Remedies: tempering, or more chains with the low ones
+examined.
 
 `executor="process"` runs chains in parallel processes (the posterior target
 is picklable); per-chain seeds are spawned from `seed`, so serial, thread and
