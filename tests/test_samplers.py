@@ -283,7 +283,7 @@ def test_lagging_chains_flags_a_chain_stuck_in_a_lower_mode():
     rng = np.random.default_rng(12)
     lp = -150 + 2 * rng.standard_normal((4, 500))  # 8 parameters: spread ~ sqrt(8 / 2)
     assert lagging_chains(lp) == ()
-    lp[2] -= 380  # the CZP case of docs/synthetic_tests.md
+    lp[2] -= 380  # the CZP case of docs/resolution.md, section 4
     lp[3] -= 3  # shifted, but overlapping: not flagged
     assert lagging_chains(lp) == (2,)
 

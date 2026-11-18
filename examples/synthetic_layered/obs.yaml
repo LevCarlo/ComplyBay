@@ -1,4 +1,4 @@
-# Station, data and forward settings for synthetic test 2 (same as examples/synthetic).
+# Station, data and forward settings for the two-unit synthetic test (same as examples/synthetic).
 # Data files: three columns  x  value  sigma  (see complybay.io.files).
 # The data were made by tools/make_synthetic_example.py.
 

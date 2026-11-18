@@ -148,3 +148,30 @@ def test_deep_model_is_truncated_instead_of_overflowing():
     np.testing.assert_allclose(compliance(shallow, freqs[2:]), eta[2:], rtol=1e-10)
     # Keeping more layers (larger cutoff) does not change the result: truncation error is tiny.
     np.testing.assert_allclose(compliance(model, freqs[:2], decay_cutoff=40.0), eta[:2], rtol=1e-9)
+
+
+def test_kernel_passes_decay_cutoff_through():
+    model = _obs("sediment_gradient", 779.0)
+    freqs = np.array([0.02])
+    tops_m = model.solid.tops[:-1] * 1e3
+    k = water_wavenumber(2 * np.pi * freqs, 779.0)
+    cutoff = 0.5 * k[0] * tops_m[3]  # cut halfway down to the top of layer 3
+    assert np.searchsorted(tops_m, cutoff / k[0]) < model.solid.n_layers  # layers are dropped
+    kernel = compliance_kernel(model, freqs, "vs", rel_step=0.01, decay_cutoff=cutoff)
+
+    def eta(m):
+        return compliance(m, freqs, decay_cutoff=cutoff)
+
+    for layer in (1, 2, model.solid.n_layers):  # kept, cut half-space, dropped
+        plus = model.with_solid(model.solid.scaled("vs", layer, 1.01))
+        minus = model.with_solid(model.solid.scaled("vs", layer, 0.99))
+        expected = (eta(plus) - eta(minus)) / (0.02 * eta(model))
+        np.testing.assert_allclose(kernel[:, layer], expected, rtol=1e-12)
+    # Layers dropped by the cut have no influence; with the default they do.
+    assert np.all(kernel[:, 3:] == 0.0) and np.all(kernel[:, :3] != 0.0)
+    assert np.any(compliance_kernel(model, freqs, "vs", rel_step=0.01)[:, 3:] != 0.0)
+    # The default is the same as passing 25 explicitly.
+    np.testing.assert_array_equal(
+        compliance_kernel(model, freqs, "vs"),
+        compliance_kernel(model, freqs, "vs", decay_cutoff=25.0),
+    )

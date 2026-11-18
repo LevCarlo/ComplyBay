@@ -24,8 +24,7 @@ member, M = h^2 I and this is -1/2 |y|^2 / h^2 - k ln h: the k-dimensional
 version of the independent formula. Keeping all eigenvectors would give the
 full Gaussian, but these correlations are nearly singular and the discarded
 directions carry no error variance, so including them would put N instead of
-k in the h term and drive h too low (the calibration is in
-``docs/inference.md``).
+k in the h term and drive h too low (``docs/likelihood.md``, section 3).
 
 A forward failure (an exception from a solver, or a non-finite prediction such
 as a missing dispersion mode) gives log L = -inf with the reason.
@@ -102,8 +101,10 @@ def predict(observations: Sequence[Observation], model: OBSModel) -> list[np.nda
     return predictions
 
 
-# Assumed: the error eigenvectors holding 99 % of the variance are kept; in Monte
-# Carlo tests of kim2023 stacks this gave chi2 / k = 1.0-1.1 (docs/inference.md).
+# Assumed: the error eigenvectors holding 99 % of the variance are kept; on Monte
+# Carlo residuals of the kim2023 processing with the theory correlation this gives
+# chi2 / k = 1.0 within 0.05 (docs/scripts/likelihood_correlation.py,
+# docs/likelihood.md section 3).
 DEFAULT_VARIANCE_FRACTION = 0.99
 
 

@@ -21,7 +21,7 @@ Run first:
 python tools/data_subset_test.py examples/synthetic runs/data_subsets
 ```
 
-Discussion in `docs/synthetic_tests.md`."""),
+Discussion in `docs/resolution.md`."""),
     code("""from pathlib import Path
 import numpy as np
 import xarray as xr

@@ -4,16 +4,26 @@ Run at setup, before sampling. They never raise: each returns notes, at level
 ``"warning"`` (likely a mistake or unusable data) or ``"info"`` (numbers worth
 knowing before reading the results). The formulas are in the forward modules.
 
-- Compliance above the infragravity limit
-  (:func:`complybay.forward.infragravity_cutoff`, about sqrt(g / (2 pi H))):
-  the wave pressure barely reaches the seafloor there, so the data are noise.
-- ACF window and the water multiples
-  (:func:`complybay.forward.water_multiple_lags`): which multiples the window
-  holds, and how far a water-depth error shifts them, in seconds and in phase
-  at the peak of the processing passband.
-- ACF window against the data: lags beyond the data's maximum lag, and the
-  normalizing zero lag inside the window (fixed to 1 in data and synthetics,
-  so it carries no information but counts in N).
+- warning: compliance frequencies above the infragravity limit
+  f_c = sqrt(g tanh(2 pi) / (2 pi H))
+  (:func:`complybay.forward.infragravity_cutoff`), where the wavelength
+  equals the water depth H (0.028 Hz in 2 km of water): the wave pressure at
+  the seafloor is attenuated by more than cosh(2 pi) = 268, so the data are
+  noise.
+- warning: an ACF window ending beyond the data's last lag.
+- warning: an ACF window that includes the normalizing zero lag
+  (``normalize: zero_lag``): fixed to 1 in data and synthetics, so it carries
+  no information but counts in N.
+- info: the water multiples inside an ACF window, at lags
+  m 2 H sqrt(1 / vp_w^2 - p^2) (:func:`complybay.forward.water_multiple_lags`),
+  and how far a water-depth error of ``DEPTH_ERROR_KM`` (10 m, assumed)
+  shifts them, in seconds and in degrees at the peak of the processing
+  passband.
+- info: no water multiple inside the window, so the ACF fit does not depend
+  on the water depth.
+
+The multiples are the strongest arrivals of a seafloor ACF, so the water
+depth should come from a bathymetric or acoustic survey of the station.
 """
 
 from __future__ import annotations
@@ -97,7 +107,9 @@ def _check_acf(obs: ACFObservation, water: WaterLayer | None) -> list[Note]:
         return notes
     first = water_multiple_lags(water, obs.ray_p, 1)[0]
     lags = water_multiple_lags(water, obs.ray_p, int(max_lag // first) + 1)
-    inside = lags[(lags >= lo) & (lags <= min(hi, max_lag))]
+    in_window = (lags >= lo) & (lags <= min(hi, max_lag))
+    inside = lags[in_window]
+    order = np.arange(1, lags.size + 1)[in_window]  # m of each multiple, lag m * first
     if inside.size == 0:
         notes.append(
             Note(
@@ -109,7 +121,7 @@ def _check_acf(obs: ACFObservation, water: WaterLayer | None) -> list[Note]:
         )
         return notes
     q = lags[0] / (2 * water.thickness)
-    shift = 2 * q * DEPTH_ERROR_KM * np.arange(1, inside.size + 1)
+    shift = 2 * q * DEPTH_ERROR_KM * order
     peak = _passband_peak(obs)
     phase = (
         ""

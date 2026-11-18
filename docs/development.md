@@ -92,8 +92,8 @@ inversion layer is rewritten.
 
 - Every forward solver has at least one independent physical check, not just
   "it runs": an analytic limit, a conservation law, an independent
-  implementation, or the legacy baseline. `docs/forward.md` lists the checks
-  in place.
+  implementation, or the legacy baseline. The "Verified / not verified"
+  table at the end of each method page lists the checks in place.
 - Every tolerance has a reason, written next to it when it is not obvious
   (for example the f2py vs meson build difference in the legacy tests).
 - New behavior comes with tests in the same change. Bug fixes come with a test
@@ -122,16 +122,26 @@ inversion layer is rewritten.
 
 ## Documentation
 
-- `docs/forward.md` describes the forward solvers: conventions, options and
-  how each was validated. Update it with any solver change.
-- `CHANGELOG.md` records user-visible changes, newest first.
-- The pages under `docs/` are also a website (`mkdocs.yml`, MkDocs Material):
-  `pip install -e ".[docs]"`, then `mkdocs serve` to preview or
-  `mkdocs build --strict` to check links; a new page goes into `nav` in
-  `mkdocs.yml`. The built `site/` is not tracked. Formulas in the pages are
-  LaTeX between `$...$` (inline) or `$$...$$` (display), so a literal `$`
-  needs escaping. `docs/api/` lists the modules rendered from their
-  docstrings; add a new public module there too.
+- `docs/` is flat: `index.md` (tools, inputs and outputs, shared
+  conventions), one page per method, `development.md`, and `api/` (modules
+  rendered from their docstrings; add a new public module there). A new page
+  goes into `nav` in `mkdocs.yml`. A change to a method updates its page.
+- Every figure comes from `docs/scripts/<name>.py` and is saved as
+  `docs/img/<name>.png`. Scripts call the package on synthetic models with a
+  known answer, assert their numbers and run in seconds.
+- Formulas and tables of numbers are written by scripts as snippets in
+  `docs/generated/`, numerically asserted against the package, committed, and
+  included in pages with `--8<--`; `exclude_docs` keeps `generated/` and
+  `scripts/` out of the site.
+- Every method page ends with "Verified / not verified": each claim and the
+  test or script that checks it, and what is not checked. Pages describe the
+  current method, not its history; `CHANGELOG.md` records user-visible
+  changes, newest first.
+- `pip install -e ".[docs]"`, then `mkdocs serve` to preview;
+  `mkdocs build --strict` must pass. The docs CI neither installs the package
+  nor runs the scripts, so rerun the scripts you touched and commit their
+  output. Formulas are LaTeX between `$...$` or `$$...$$`, so a literal `$`
+  needs escaping. The built `site/` is not tracked.
 - Demo notebooks under `examples/` are not tracked (`.gitignore`); anything a
   test or another script depends on belongs in `src/`, `tests/` or `tools/`.
 

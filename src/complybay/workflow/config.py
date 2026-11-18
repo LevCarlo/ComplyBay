@@ -30,25 +30,76 @@
       acf: {duration: 200.0}
 
 The water column belongs to the station, so it is given in ``obs.yaml`` and
-the same ``model.yaml`` serves stations at different depths. Each data group
-with ``noise`` gets a sampled ``noise.<group>`` parameter (log10 of its noise
-scale; defaults: bounds [-0.5, 0.5], initial 0, proposal sigma 0.05); without
-``noise`` its sigma is used as given. Relative file paths are relative to the
-YAML file. Unknown keys are errors, so typos do not pass silently.
+the same ``model.yaml`` serves stations at different depths (``Model.water``
+in ``model.yaml`` is refused). Relative file paths are relative to the YAML
+file. Unknown keys are errors, so typos do not pass silently.
+
+Data files are three-column text files (``x value sigma``,
+:mod:`complybay.io.files`): frequency (Hz) for compliance, period (s) for
+phase velocity, lag (s) for an ACF. The lags of an ACF file must start at 0
+with a constant step; the step is the ``dt`` and the last lag the
+``max_lag`` of the processing.
+
+Noise scales: each data group with ``noise`` gets a sampled parameter
+``noise.<group>`` (log10 of its noise scale h), appended after the
+``Inversion.parameters``. ``noise: true`` takes the defaults, a mapping
+overrides them:
+
+| key | default |
+|---|---|
+| ``bounds`` | [-0.5, 0.5] (uniform prior on log10 h) |
+| ``initial`` | 0.0 |
+| ``proposal_sigma`` | 0.05 |
+
+Without ``noise`` the stated sigma is used as given (h = 1). Group names are
+``compliance``, ``dispersion``, ``acf_<component>`` (``acf_vertical``,
+``acf_pressure``, ``acf_radial``), or ``acf_<name>_<component>`` for a list
+of ACF groups.
+
+``Observations.acf.processing`` must be the processing that made the
+observed ACF: a preset name (``kim2023``, the default, or ``tauzin2019``;
+:data:`complybay.acf.PRESETS`), ``{preset: <name>, <overrides>}``, or a full
+mapping. Allowed keys besides ``preset``: ``whitening`` (mapping of
+:class:`~complybay.acf.Whitening` fields, or null), ``filters`` (list of
+``{type: bandpass | highpass | lowpass | gaussian, <fields>}``),
+``zero_lag_taper``, ``normalize``, ``band_tolerance``.
 
 ``Observations.acf.error_correlation`` sets how ACF errors are correlated
 between lags (:mod:`complybay.acf.errors`, :class:`ErrorCorrelation`):
-``none`` (default, independent lags), ``processing`` (theory for additive
-noise, per component, with the observed ACF as the expected one), or
-``{file: acf_errors.nc}`` (written by :func:`complybay.io.write_acf_errors`
-from the event ACFs; one joint block for all components, so Z-P correlation
-is kept). Either mapping form takes ``variance_fraction`` (default 0.99).
+
+- ``none`` or absent (default): no block; lags and components independent.
+- ``processing`` or ``{model: processing}``: one block per component, the
+  theory for additive noise with the observed ACF as the expected one.
+- ``{file: acf_errors.nc}``: one joint block for all components, estimated
+  from the event ACFs (:func:`complybay.acf.stack_errors`, written by
+  :func:`complybay.io.write_acf_errors`); keeps the Z-P correlation.
+
+Both mapping forms take ``variance_fraction`` (default 0.99, the fraction of
+the correlation's trace kept). With ``file``, the file's lag grid must equal
+the data's, its stacks must equal the data files (to 1e-6), it must hold
+every component, and all components need the same window.
 
 ``Observations.acf`` may be a list of groups, each a mapping as above plus a
 ``name`` (letters, digits, _): events binned by ray parameter, each bin with
-its own ``ray_p``, stacks, window and ``error_correlation`` file. Their data
-groups are ``acf_<name>_<component>``, each with its own noise scale; errors of
-different groups are independent (different events).
+its own ``ray_p``, stacks, window and ``error_correlation``::
+
+    acf:
+      - name: p05
+        processing: kim2023
+        ray_p: 0.05
+        window: [0.3, 8.0]
+        error_correlation: {file: acf_errors_p05.nc}
+        components:
+          vertical: {file: acf_z_p05.dat, noise: {bounds: [-0.5, 1.0]}}
+          pressure: {file: acf_p_p05.dat, noise: {bounds: [-0.5, 1.0]}}
+      - name: p07
+        ray_p: 0.07
+        ...
+
+Their data groups are ``acf_<name>_<component>``, each with its own noise
+scale and error-correlation block; errors of different groups are
+independent (different events). Every group costs one seafloor response per
+likelihood evaluation.
 """
 
 from __future__ import annotations

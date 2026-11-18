@@ -15,6 +15,7 @@ runs/
 
 **/*.ipynb
 **/*.png
+!docs/img/*.png
 
 .DS_Store
 

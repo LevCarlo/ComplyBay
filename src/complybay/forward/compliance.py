@@ -50,9 +50,10 @@ def water_wavenumber(
 
     ``method="exact"`` solves omega^2 = g k tanh(k H) by vectorized Newton
     iteration from Eckart's approximation. ``method="poly"`` is the series
-    approximation used by v0.1 (MDN-Compliance ``gravd``); it is up to ~2 %
-    off the exact root near k H ~ 1-2 (up to ~3 % in compliance) and is kept
-    only to reproduce old results.
+    approximation used by v0.1 (MDN-Compliance ``gravd``); it is up to 2 %
+    off the exact root (largest near k H ~ 1.7). The resulting compliance error
+    is of the same order and depends on the model (docs/compliance.md). It is
+    kept only to reproduce old results.
     """
     omega = np.atleast_1d(np.asarray(omega, dtype=float))
     if depth_m <= 0:
@@ -162,16 +163,20 @@ def compliance_kernel(
     rel_step: float = 0.025,
     wavenumber: WavenumberMethod = "exact",
     g: float = G_DEFAULT,
+    decay_cutoff: float = 25.0,
 ) -> np.ndarray:
     """Relative sensitivity d ln(eta) / d ln(m) of every layer and the half-space.
 
-    Central differences with relative perturbation ``rel_step``. Returns shape
-    ``(n_freqs, n_layers + 1)``; the last column is the half-space. Kernels
-    depend on layer thickness, so resample the model (``LayeredModel.resampled``)
-    to compare layers on an even depth grid.
+    Central differences with relative perturbation ``rel_step``; every
+    compliance evaluation uses ``wavenumber``, ``g`` and ``decay_cutoff`` as in
+    :func:`compliance`. Returns shape ``(n_freqs, n_layers + 1)``; the last
+    column is the half-space. Layers that the cut drops (those below the layer
+    that serves as the half-space) get a zero kernel at that frequency.
+    Kernels depend on layer thickness, so resample the model
+    (``LayeredModel.resampled``) to compare layers on an even depth grid.
     """
     freqs = np.atleast_1d(np.asarray(freqs, dtype=float))
-    kwargs = {"wavenumber": wavenumber, "g": g}
+    kwargs = {"wavenumber": wavenumber, "g": g, "decay_cutoff": decay_cutoff}
     eta0 = compliance(model, freqs, **kwargs)
     solid = model.solid
     kernel = np.empty((freqs.size, solid.n_layers + 1))

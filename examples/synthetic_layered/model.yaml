@@ -1,6 +1,6 @@
-# Synthetic test 2 (docs/synthetic_tests.md): two sediment segments, each with
-# a Vs gradient and its own constant Vp, over a crust whose Vs gradient is
-# sampled. The true values are in truth.yaml; the data were made by
+# Two-unit synthetic test (docs/resolution.md, section 2): two sediment
+# segments, each with a Vs gradient and its own constant Vp, over a crust whose
+# Vs gradient is sampled. The true values are in truth.yaml; the data were made by
 # python tools/make_synthetic_example.py examples/synthetic_layered
 
 Model:

@@ -15,9 +15,13 @@ Tkalcic (2019, GJI 217, 1-24, doi:10.1093/gji/ggz002):
    (``average="amplitude"``); the divisor is floored at ``water_level`` times
    its maximum;
 2. autocorrelate: power spectrum, inverse FFT, keep lags 0..``max_lag``;
-3. filter: multiply the power spectrum by the zero-phase response of every
-   filter in ``filters``, in order (equivalent to filtering the ACF forward
-   and backward for the Butterworth filters);
+3. filter: multiply the power spectrum by the ``power_response`` of every
+   filter in ``filters``, in order. For the Butterworth filters this is
+   |B|^4, |B|^2 being the Butterworth power response (0.5 at the corner, so
+   0.25 after the filter): the same as filtering the trace forward and
+   backward before autocorrelating (filtering the ACF itself forward and
+   backward would multiply by |B|^2 only). The Gaussian filter multiplies by
+   exp(-(omega / 2a)^2);
 4. taper the zero-lag peak with a sin^2 ramp over ``zero_lag_taper`` s;
 5. normalize.
 
@@ -79,7 +83,7 @@ class Whitening:
 
 
 class Filter(Protocol):
-    """Anything with a zero-phase response to multiply into the power spectrum."""
+    """Anything with a real, non-negative ``power_response`` to multiply into the power spectrum."""
 
     def power_response(self, freqs: np.ndarray) -> np.ndarray: ...
 
@@ -100,7 +104,12 @@ def _check_corners(corners):
 
 @dataclass(frozen=True)
 class Bandpass:
-    """Butterworth band-pass applied with zero phase (|B(f)|^2 on the power spectrum)."""
+    """Butterworth band-pass of order ``corners``, applied to the trace forward and backward.
+
+    ``power_response`` is |B(f)|^4, with |B|^2 the product of the high-pass
+    and low-pass Butterworth power responses (0.25 at each corner, for
+    corners well apart).
+    """
 
     freqmin: float
     freqmax: float
@@ -119,7 +128,11 @@ class Bandpass:
 
 @dataclass(frozen=True)
 class Highpass:
-    """Butterworth high-pass applied with zero phase."""
+    """Butterworth high-pass of order ``corners``, applied to the trace forward and backward.
+
+    ``power_response`` is |B(f)|^4 with |B|^2 = 1 / (1 + (freq / f)^(2 corners)),
+    the Butterworth power response (0.25 at the corner).
+    """
 
     freq: float
     corners: int = 2
@@ -135,7 +148,11 @@ class Highpass:
 
 @dataclass(frozen=True)
 class Lowpass:
-    """Butterworth low-pass applied with zero phase."""
+    """Butterworth low-pass of order ``corners``, applied to the trace forward and backward.
+
+    ``power_response`` is |B(f)|^4 with |B|^2 = 1 / (1 + (f / freq)^(2 corners)),
+    the Butterworth power response (0.25 at the corner).
+    """
 
     freq: float
     corners: int = 2

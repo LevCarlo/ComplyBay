@@ -1,13 +1,27 @@
 """Run an inversion from ``model.yaml`` / ``obs.yaml`` and write its outputs.
 
-Output directory (refused if it exists, unless ``overwrite``)::
+Output directory (refused if it exists, unless ``overwrite``):
 
-    resolved_model.yaml, resolved_obs.yaml   inputs, plus a Run block
-    run.log                                  settings, progress, diagnostics
-    prior_mcmc.nc, prior_model.nc            with --prior-only / --with-prior
-    posterior_mcmc.nc, posterior_model.nc, posterior_predictive.nc
+- ``resolved_model.yaml``, ``resolved_obs.yaml``: the inputs plus a ``Run``
+  block with ``complybay_version``, ``git_commit``, ``created``,
+  ``model_file``, ``obs_file``, ``station``, ``water_depth_km``,
+  ``parameter_names``, ``sampler_seed``, ``sampler_n_chains``,
+  ``sampler_executor``, ``sampler_initial`` (keys whose value is None, such
+  as ``obs_file`` of a prior-only run, are left out).
+- ``run.log``: settings, the setup checks (:mod:`complybay.workflow.checks`),
+  progress, and per stage the acceptance after burn-in, a parameter table
+  (median, 5 %, 95 %, R-hat, ESS), the tempering ladder and the swap
+  acceptance of each chain, a warning when R-hat > 1.1 and one per lagging
+  chain (:func:`complybay.inference.lagging_chains`); for the posterior also
+  chi2/N and the noise scale h of the best sample per data group, and chi2/k
+  per correlated block.
+- ``<stage>_mcmc.nc``, ``<stage>_model.nc`` for each stage: ``prior`` (with
+  ``prior_only`` or ``with_prior``) and ``posterior``.
+- ``posterior_predictive.nc`` for posterior runs.
 
-See :mod:`complybay.io.netcdf` for the file contents.
+The netCDF variables are listed in :mod:`complybay.io.netcdf`. The R-hat
+threshold of the warning (1.1) is assumed, a common choice (Gelman et al.,
+2013).
 """
 
 from __future__ import annotations

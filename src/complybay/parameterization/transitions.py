@@ -20,7 +20,7 @@ Shapes
     reach exactly 0 and 1. Maximum gradient ``~ 1.1 dv / w``.
 ``smootherstep``
     Quintic ``6x^5 - 15x^4 + 10x^3`` on the support; C2-continuous with
-    ``h = 0.987 w``. Maximum gradient ``~ 0.93 dv / w``.
+    ``h = 0.987 w``. Maximum gradient ``(15 / 16) dv / h ~ 0.95 dv / w``.
 """
 
 from __future__ import annotations

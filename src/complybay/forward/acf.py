@@ -146,7 +146,10 @@ def wraparound_fraction(
     The synthetic spectrum is periodic in time with period ``duration``; energy
     still arriving near the end of the window is aliased onto early lags. The
     response is filtered with the processing's filters (not whitened) before
-    measuring.
+    measuring. The acausal half of the zero-phase-filtered first arrival also
+    wraps to the end of the window, so when that arrival lies within about 1 s
+    of t = 0 (a shallow half-space top) the fraction has a floor that a longer
+    ``duration`` does not lower (``docs/acf.md``, section 8).
     """
     if not 0 < tail < 1:
         raise ValueError("tail must be in (0, 1).")

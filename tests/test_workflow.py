@@ -1,4 +1,5 @@
 import copy
+import re
 from pathlib import Path
 
 import numpy as np
@@ -7,10 +8,12 @@ import xarray as xr
 
 from complybay.acf import Highpass, Whitening, preset
 from complybay.cli import main
-from complybay.forward import synthetic_acfs
+from complybay.forward import synthetic_acfs, water_multiple_lags
+from complybay.inference import ACFObservation
 from complybay.inference.diagnostics import effective_sample_size, split_rhat
 from complybay.inference.ensemble import derived_quantities
 from complybay.io import dump_yaml, load_yaml, read_three_columns, write_three_columns
+from complybay.model import WaterLayer
 from complybay.parameterization import (
     ConstantProfile,
     GradientProfile,
@@ -18,6 +21,7 @@ from complybay.parameterization import (
     Segment,
 )
 from complybay.workflow import build_inversion, run_inversion
+from complybay.workflow.checks import DEPTH_ERROR_KM, check_observations
 from complybay.workflow.config import processing_from_config
 
 EXAMPLE = Path(__file__).parents[1] / "examples" / "synthetic"
@@ -206,6 +210,23 @@ def test_setup_checks_flag_unusable_data(tmp_path):
     obs["Observations"]["acf"]["window"] = [0.3, 2.0]
     notes = build_inversion(model_cfg, obs).check()
     assert any(m.message.startswith("no water multiple") for m in notes)
+
+
+def test_water_multiple_shift_uses_the_true_order():
+    # Window from 3 s: the first multiple (2.66 s) is outside, so the first one
+    # reported is m = 2 and its shift for a depth error dH is 2 q dH m with m = 2.
+    water = WaterLayer(2.0)
+    processing = preset("kim2023")
+    n_lags = int(round(processing.max_lag / 0.05)) + 1
+    acf = ACFObservation("vertical", 0.06, processing, np.zeros(n_lags), 0.05, (3.0, 8.0))
+    (note,) = [n for n in check_observations([acf], water) if n.level == "info"]
+    match = re.search(r"window at ([\d., ]+) s; .* shifts them by ([\d., ]+) s", note.message)
+    lags, shifts = ([float(x) for x in group.split(", ")] for group in match.groups())
+    q = np.sqrt(1 / water.vp**2 - 0.06**2)
+    first = water_multiple_lags(water, 0.06, 1)[0]
+    m = np.rint(np.array(lags) / first)
+    assert m[0] == 2
+    np.testing.assert_allclose(shifts, 2 * q * DEPTH_ERROR_KM * m, atol=5e-4)  # 3 decimals
 
 
 def test_processing_config_forms():

@@ -1,4 +1,4 @@
-# True model of synthetic test 2 (assumed values, typical of a two-unit
+# True model of the two-unit synthetic test (assumed values, typical of a two-unit
 # sediment cover: soft muds over more consolidated sediment).
 parameters:
   sed_boundary.depth: 0.25

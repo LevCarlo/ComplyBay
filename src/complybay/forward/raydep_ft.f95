@@ -120,6 +120,12 @@ subroutine raydep_ft(v, u, zz, zx, p, om, model, n_layers)
     ls = i
     
     if (i .ge. 2) then
+      ! Note: "i" here is the integer layer index, so this is |v + i u|, not
+      ! the modulus of v + sqrt(-1) u that a MATLAB original may have meant.
+      ! The legacy Python port (ncomp_matlab_py.py) does the same with its
+      ! 0-based index. The test only stops the downward pass early; row 1
+      ! (the seafloor), the only row compliance uses, is computed before it.
+      ! Left unchanged: the intent cannot be established from the code.
       sum = abs( x(i,1) + i * x(i,2))
       pbsq = 1 / Vs(i)**2
       if (sum .lt. 1e-4) then

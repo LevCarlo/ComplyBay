@@ -15,7 +15,7 @@ integrated over the segment's depth interval of the blended model with
 Gauss-Legendre quadrature; plus every interface depth and width.
 
 The travel-time average weights the slowest part (often the poorly resolved
-top of a sediment) most. In the synthetic tests (``docs/synthetic_tests.md``)
+top of a sediment) most. In the synthetic tests (``docs/resolution.md``, section 2)
 a sediment Vs gradient was fixed best near mid-depth, where the trading end
 values pivot, and among power means by the sqrt mean (+-6 % against +-16 % for
 ``vs_mean``); the pivot depth depends on the data, so these two are

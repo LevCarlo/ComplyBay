@@ -2,9 +2,15 @@
 
 The water column is passed to disba as a fluid top layer (vs = 0). With a few
 km of water the fundamental Rayleigh mode drops steeply at short periods
-(towards the water sound speed), so mode 0 below ~10 s is strongly controlled
+towards the Scholte speed of water over the top solid layer (below both its
+vs and the water sound speed), so mode 0 below ~10 s is strongly controlled
 by water depth and the shallowest sediment; that is the physical fundamental
 mode, not a separate branch.
+
+Failures: a period without a root for the requested mode gives NaN at that
+period. If disba fails to find the fundamental-mode root at any period it
+raises, and :func:`phase_velocity` then returns NaN at every period of that
+call (for an attenuating model, one call per period, so only at that period).
 
 Attenuating models (finite qp/qs): each period uses the elastic model with
 the layers' phase velocities at frequency 1 / period

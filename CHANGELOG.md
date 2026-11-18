@@ -11,8 +11,8 @@ option that restores the old behavior where one exists.
 - **Water-wave wavenumber in the new compliance API.**
   `complybay.forward.compliance` solves `omega^2 = g k tanh(k H)` exactly by
   default (`wavenumber="exact"`). v0.1 used the series approximation `poly`,
-  which is up to ~2 % off in k near k H ~ 1-2 and up to ~3 % off in
-  compliance. The legacy functions (`ncomp_fortran_batch`, `k_method="poly"`)
+  which is up to 2 % off in k (largest near k H ~ 1.7); the compliance error
+  is of the same order and depends on the model (`docs/compliance.md`). The legacy functions (`ncomp_fortran_batch`, `k_method="poly"`)
   are unchanged; the old numbers come back with `wavenumber="poly"`. When the
   inversion moves to the new API, compliance predictions change by this
   amount.
@@ -27,6 +27,21 @@ option that restores the old behavior where one exists.
   restores the old build.
 
 ### Added
+
+- `compliance_kernel(..., decay_cutoff=25.0)`: the model cut of `compliance`
+  is now passed through to every evaluation of the kernel (before, the kernel
+  always used the default 25). The default gives the same numbers as before.
+- Documentation restructured into one page per method: `docs/compliance.md`,
+  `dispersion.md`, `acf.md`, `attenuation.md` (forward solvers) and
+  `parameterization.md`, `likelihood.md`, `sampling.md`, `resolution.md`
+  (inversion), with `docs/index.md` as the overview of tools and shared
+  conventions. Every figure is made by `docs/scripts/<name>.py`, formulas and
+  tables by scripts that assert them against the package (`docs/generated/`);
+  `matplotlib` added to the `docs` extra for them. Removed `docs/forward.md`,
+  `inference.md`, `workflow.md` and `synthetic_tests.md`; configuration keys
+  and output files are now documented in the docstrings of
+  `complybay.workflow.config`, `.driver`, `.checks` and `complybay.io.netcdf`
+  (API reference).
 
 - Documentation website: `mkdocs.yml` (MkDocs Material) over `docs/`, an
   API reference generated from the docstrings (`docs/api/`, mkdocstrings),
@@ -97,7 +112,7 @@ option that restores the old behavior where one exists.
 - `complybay.inference`: compliance, dispersion and ACF observations, a joint
   Gaussian likelihood with one sampled noise scale (`log10 h`) per data group,
   Z and P ACFs predicted from one shared response, and `PosteriorTarget` with
-  a prior-only mode (`docs/inference.md`).
+  a prior-only mode (`docs/likelihood.md`).
 - Metropolis sampler (`run_metropolis`, adapted from SeisForge): one- or
   all-parameter Gaussian updates, burn-in-only proposal adaptation, global
   uniform jumps (one parameter at a time in one-parameter mode), a temperature setting as the parallel-tempering hook, and
@@ -108,7 +123,7 @@ option that restores the old behavior where one exists.
   forward settings), validated with explicit errors for unknown keys; run
   directories with resolved configs plus run metadata, a log with R-hat/ESS and
   per-group fit, and netCDF files of the chains, the model ensemble with
-  derived quantities, and the posterior predictive (`docs/workflow.md`).
+  derived quantities, and the posterior predictive (`docs/sampling.md`).
   Example with synthetic data in `examples/synthetic/`
   (`tools/make_synthetic_example.py`). New dependencies: xarray, h5netcdf, h5py.
 - Convergence diagnostics: split R-hat and multi-chain effective sample size.
@@ -133,7 +148,7 @@ option that restores the old behavior where one exists.
   `tools/acf_correlation_test.py` compares the error models. Default results
   are unchanged.
 - `tools/data_subset_test.py`: inverts the synthetic example with every
-  combination of data groups; results in `docs/synthetic_tests.md`.
+  combination of data groups; results in `docs/resolution.md`.
 - Regression baseline of the v0.1 forward outputs
   (`tests/data/legacy_v0_1_forward.npz`, `tools/make_legacy_baseline.py`).
 - Tests against analytic and independent solutions; `docs/forward.md`,
@@ -162,6 +177,10 @@ option that restores the old behavior where one exists.
 
 ### Fixed
 
+- The setup check of water multiples in an ACF window reported the
+  depth-error shifts (and the phase) of orders 1..n even when the window
+  started after the first multiple; each multiple now uses its own order m
+  (shift 2 m q_w dH). Only the `run.log` note changes, not results.
 - `ComplyKernel` failed under NumPy 2 (stored a size-1 array in a scalar
   element).
 - `run_comply_inv` / `run_joint_inv` failed under NumPy 2 when reading the
@@ -169,9 +188,14 @@ option that restores the old behavior where one exists.
 
 ### Known issues
 
+- `raydep_ft.f95` (and the legacy Python port) test `abs(x(i,1) + i*x(i,2))`
+  with the integer layer index `i` to stop the downward pass early; what the
+  original MATLAB meant cannot be established here. Compliance uses only the
+  seafloor row, which is computed before the test, so it is unaffected. The
+  arithmetic is left unchanged and documented in a comment.
 - Legacy `inversion.inv.forward_sw` calls `RhoEstimate` without Vp, so
   Vp-based density relations fail there; it will be replaced together with
   the inversion layer.
 - No solver includes attenuation (Q).
 - The `snr` correction of noisy ACF amplitudes leaves a bias of several stack
-  sigmas in simulations (`docs/forward.md`).
+  sigmas in simulations (`docs/acf.md`, section 7).

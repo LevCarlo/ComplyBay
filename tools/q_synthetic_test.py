@@ -3,8 +3,9 @@
 The true model of ``examples/synthetic`` with sediment Qs = 20, Qp = 100
 (velocities at the 1 Hz reference) gives the data, with the same noise
 realization as the example (relative for compliance, additive otherwise), so
-the runs compare with test 1's CDZP case. Two inversions: elastic, and with
-Q fixed at its true value (``docs/synthetic_tests.md``, test 6).
+the runs compare with the CDZP case of ``tools/data_subset_test.py``. Two
+inversions: elastic, and with Q fixed at its true value (``docs/resolution.md``,
+section 5).
 
     python tools/q_synthetic_test.py
 """

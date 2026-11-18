@@ -2,7 +2,9 @@
 
 Forward modelling and Bayesian inversion for ocean-bottom seismology
 (compliance, Rayleigh phase velocity, teleseismic ACF). Full rules:
-`docs/development.md`; solver conventions and validation: `docs/forward.md`.
+`docs/development.md`; shared conventions: `docs/index.md`; each solver's
+conventions and validation: its own page (`docs/compliance.md`,
+`dispersion.md`, `acf.md`, `attenuation.md`).
 
 ## Commands
 

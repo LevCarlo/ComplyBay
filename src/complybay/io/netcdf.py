@@ -1,25 +1,65 @@
 """Inversion results as xarray datasets (written as netCDF4 with h5netcdf).
 
-Three files per run stage (``prior`` or ``posterior``):
+Files of a run (stage ``prior`` or ``posterior``), variables with their
+dimensions:
 
-- ``<stage>_mcmc.nc``: theta (chain, draw, parameter), log_prior,
-  log_likelihood, accepted (chain, step), acceptance rate, adapted proposal
-  sigma, initial theta, split R-hat and effective sample size per parameter;
-  with ``update="covariance"`` also the frozen proposal covariance
-  (chain, parameter, parameter_2).
-- ``<stage>_model.nc``: Vs, Vp, rho, Vp/Vs (sample, depth) for a subset of the
-  samples, their quantiles (quantile, depth), and derived quantities per sample
-  (interface depths, per-segment thickness, two-way times, mean Vs).
-- ``posterior_predictive.nc``: per data group the observed values, sigma,
-  fitted mask, predictions of a subset of samples, and the prediction of the
-  best (highest posterior) sample with its chi2 and noise scale.
+``<stage>_mcmc.nc`` (:func:`mcmc_dataset`); draws are the kept (post burn-in,
+thinned) states of the stored replica (T = 1 by default; the first of the
+ladder with tempering):
 
-``acf_errors.nc`` (:func:`write_acf_errors`): a stacked ACF with its sigma
-and the error correlation between lags and components, the input of
-``error_correlation: {file: ...}`` in ``obs.yaml``.
+- ``theta`` (chain, draw, parameter); ``log_prior``, ``log_likelihood``
+  (chain, draw);
+- ``accepted`` (chain, step), every step including burn-in;
+  ``acceptance_rate`` (chain), after burn-in;
+- ``proposal_sigma``, ``initial_theta`` (chain, parameter); ``rhat``, ``ess``
+  (parameter), split R-hat and effective sample size;
+- ``trace_log_posterior`` (chain, trace_step): every ``thin`` steps from step
+  0, burn-in included;
+- posterior only, the per-group misfits: ``group_chi2`` (chain, draw, group),
+  chi2 with the stated sigma (h = 1; lags taken as independent for ACF groups
+  in a correlated block); ``group_n`` (group), the fitted samples N;
+  ``term_log_likelihood`` (chain, draw, term), the additive log-likelihood
+  terms (independent groups, then correlated blocks; they sum to
+  ``log_likelihood``); ``trace_group_chi2`` (chain, trace_step, group) and
+  ``trace_term_log_likelihood`` (chain, trace_step, term);
+- with ``update="covariance"``: ``proposal_covariance`` (chain, parameter,
+  parameter_2), the frozen proposal;
+- with tempering: ``swap_acceptance`` (chain, temperature_pair);
+- attributes: the sampler settings (``n_steps``, ``burn_in``, ``thin``,
+  ``update``, ``covariance_start``, ``temperature``, ``temperatures``,
+  ``swap_interval``, ``global_jump_interval``), ``stage``, ``lagging_chains``.
+
+``<stage>_model.nc`` (:func:`model_dataset`), for up to
+``Output.n_model_samples`` evenly spaced draws:
+
+- ``vs``, ``vp``, ``rho``, ``vp_vs`` (sample, depth) and ``<name>_quantile``
+  (quantile, depth) at the quantiles 0.05, 0.16, 0.5, 0.84, 0.95;
+- per sample (:func:`complybay.inference.derived_quantities`):
+  ``depth.<interface>``, ``width.<interface>``, ``thickness.<segment>``,
+  ``tp2.<segment>``, ``ts2.<segment>`` (vertical two-way P and S times),
+  ``vs_mean.<segment>``, ``vs_sqrt_mean.<segment>``, ``vs_mid.<segment>``.
+
+``posterior_predictive.nc`` (:func:`predictive_dataset`), per data group
+``<g>`` on its axis ``<g>_frequency``, ``<g>_period`` or ``<g>_lag``:
+
+- ``<g>_observed``, ``<g>_sigma``, ``<g>_fitted`` (1 where the sample enters
+  the likelihood);
+- ``<g>_predicted`` (predictive_sample, axis), predictions of
+  ``Output.n_predictive_samples`` random draws; ``<g>_best``, the prediction
+  of the draw with the highest log posterior;
+- attributes ``<g>_best_chi2``, ``<g>_best_n``, ``<g>_best_noise_scale``,
+  ``block_<name>_best_chi2`` and ``block_<name>_k`` per correlated block, and
+  ``best_log_posterior``.
+
+``acf_errors.nc`` (:func:`write_acf_errors`, :func:`read_acf_errors`), the
+input of ``error_correlation: {file: ...}`` in ``obs.yaml``: ``stack``,
+``sigma`` (component, lag) and ``correlation`` (component, window_lag,
+component_2, window_lag_2); attributes ``n_events``, ``shrinkage``,
+``shrinkage_target``.
 
 Run metadata (code version, configuration files, seed, ...) is in the global
-attributes of every file.
+attributes of every run file. Open with
+``xarray.open_dataset(path, engine="h5netcdf")``.
 """
 
 from __future__ import annotations

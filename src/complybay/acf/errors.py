@@ -3,9 +3,10 @@
 The processing (whitening, filters, normalization) makes the errors of
 neighbouring ACF lags strongly correlated: a kim2023 ACF fitted over
 0.3-8 s (155 lags) holds about 20 independent pieces of information for
-additive noise and 4-11 in simulations where the error comes from
-differences between event source wavelets (``docs/inference.md``). Treating
-lags as independent overweights the ACF.
+additive noise and about 4 for the 60 synthetic events of
+``examples/synthetic``, whose errors come from differences between event
+source wavelets (``docs/likelihood.md``, section 2). Treating lags as
+independent overweights the ACF.
 
 Two estimates:
 

@@ -8,7 +8,7 @@
   within-half variance. Values near 1 mean all chains sample the same
   distribution; 1.01-1.1 are common thresholds.
 - Effective sample size from the multi-chain autocorrelation with Geyer's
-  initial positive sequence (Vehtari et al., 2021, Bayesian Analysis 16,
+  initial monotone sequence (Vehtari et al., 2021, Bayesian Analysis 16,
   667-718, without rank normalization): how many independent draws the
   correlated chains are worth.
 - Lagging chains: a chain whose log posterior stays below that of the best

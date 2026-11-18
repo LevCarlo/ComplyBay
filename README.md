@@ -16,7 +16,7 @@ The inversion samples the model with Metropolis MCMC: adaptive covariance
 proposals, parallel tempering for the multimodal ACF posterior, a sampled
 noise scale per data group, and correlated ACF errors from the event ACFs or
 from the processing theory. Every forward solver is checked against an
-independent solution (`docs/forward.md`).
+independent solution (see the "Verified / not verified" table of each page).
 
 📖 **Documentation:** <https://levcarlo.github.io/ComplyBay/>
 
@@ -74,11 +74,10 @@ lags, acf_z = synthetic_acf(model, 0.06, preset("kim2023"), component="vertical"
 
 | page | contents |
 |---|---|
-| [Running an inversion](https://levcarlo.github.io/ComplyBay/workflow/) | configuration files, setup checks, outputs |
-| [Forward solvers](https://levcarlo.github.io/ComplyBay/forward/) | compliance, dispersion, ACF, attenuation; conventions and validation |
-| [Model parameterization](https://levcarlo.github.io/ComplyBay/parameterization/) | segments, interfaces, priors, layering |
-| [Likelihood and posterior](https://levcarlo.github.io/ComplyBay/inference/) | noise scales, correlated ACF errors, sampler |
-| [Synthetic tests](https://levcarlo.github.io/ComplyBay/synthetic_tests/) | what each data type constrains, coverage, stress tests |
+| [Overview](https://levcarlo.github.io/ComplyBay/) | the tools, their inputs and outputs, shared conventions |
+| [Compliance](https://levcarlo.github.io/ComplyBay/compliance/), [Rayleigh phase velocity](https://levcarlo.github.io/ComplyBay/dispersion/), [Teleseismic ACF](https://levcarlo.github.io/ComplyBay/acf/), [Attenuation](https://levcarlo.github.io/ComplyBay/attenuation/) | forward solvers: method, failure conditions, validation |
+| [Model parameterization](https://levcarlo.github.io/ComplyBay/parameterization/), [Likelihood and posterior](https://levcarlo.github.io/ComplyBay/likelihood/), [Sampling](https://levcarlo.github.io/ComplyBay/sampling/) | the inversion: model space and prior, noise scales and correlated ACF errors, MCMC |
+| [What the data resolve](https://levcarlo.github.io/ComplyBay/resolution/) | synthetic inversions: what each data type constrains |
 | [Development guide](https://levcarlo.github.io/ComplyBay/development/) | code layout, units, testing and reproducibility rules |
 | [API reference](https://levcarlo.github.io/ComplyBay/api/model/) | generated from the docstrings |
 
